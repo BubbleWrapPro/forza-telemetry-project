@@ -57,6 +57,21 @@ udpSocket.on('message', async (msg) => {
         // --- TEMPS AU TOUR ---
         const lastLap = msg.readFloatLE(300); // Correction de l'offset du temps au tour
 
+        // Suspensions (Débattement normalisé de 0.0 à 1.0)
+        const suspFL = msg.readFloatLE(68);
+        const suspFR = msg.readFloatLE(72);
+        const suspRL = msg.readFloatLE(76);
+        const suspRR = msg.readFloatLE(80);
+
+        // Température des pneus (en Fahrenheit, à convertir en Celsius)
+        const tempFL = (msg.readFloatLE(120) - 32) * (5/9);
+        const tempFR = (msg.readFloatLE(124) - 32) * (5/9);
+        const tempRL = (msg.readFloatLE(128) - 32) * (5/9);
+        const tempRR = (msg.readFloatLE(132) - 32) * (5/9);
+
+        // Timestamp pour l'export CSV
+        const timestamp = Date.now();
+
         if (lastLap > 0 && lastLap !== lastLapTime) {
             lastLapTime = lastLap;
             await supabase.from('laptimes').insert([{ lap_time: lastLap }]);
@@ -71,7 +86,10 @@ udpSocket.on('message', async (msg) => {
             powerHp: powerHp,
             torque: torque,
             inputs: { accel, brake, steer },
-            gForce: { x: gForceLat, y: gForceLon }
+            gForce: { x: gForceLat, y: gForceLon },
+            timestamp: timestamp,
+            suspension: { fl: suspFL, fr: suspFR, rl: suspRL, rr: suspRR },
+            tireTemp: { fl: tempFL, fr: tempFR, rl: tempRL, rr: tempRR }
         });
     }
 });

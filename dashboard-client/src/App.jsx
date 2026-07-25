@@ -30,14 +30,24 @@ function App() {
   const [connectionStatus, setConnectionStatus] = useState('pending');
   const [connectionMessage, setConnectionMessage] = useState('Connexion au serveur...');
   const [telemetryReceived, setTelemetryReceived] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedPoints, setRecordedPoints] = useState(0);
   const canvasRef = useRef(null);
   const captureIntervalRef = useRef(null);
+  const telemetryRef = useRef(telemetry);
+  const isRecordingRef = useRef(isRecording);
+  const sessionData = useRef([]);
 
   useEffect(() => {
     const handleTelemetry = (data) => {
       setTelemetry(data);
       setTelemetryReceived(true);
       drawGMeter(data.gForce);
+      telemetryRef.current = data;
+      if (isRecordingRef.current) {
+        sessionData.current.push(data);
+        setRecordedPoints((prev) => prev + 1);
+      }
     };
 
     const handleConnect = () => {
@@ -76,6 +86,10 @@ function App() {
   }, []);
 
   useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
+  useEffect(() => {
     if (!captureActive) {
       if (captureIntervalRef.current) {
         clearInterval(captureIntervalRef.current);
@@ -85,18 +99,19 @@ function App() {
 
     setCaptureStatus('Capture en cours…');
     captureIntervalRef.current = setInterval(() => {
+      const currentTelemetry = telemetryRef.current;
       setCaptureData((prev) => {
         const nextPoint = {
           timestamp: Date.now(),
-          rpm: telemetry.rpm,
-          speed: telemetry.speed,
-          powerHp: telemetry.powerHp,
-          torque: telemetry.torque,
-          accel: telemetry.inputs.accel,
-          brake: telemetry.inputs.brake,
-          steer: telemetry.inputs.steer,
-          gForceX: telemetry.gForce?.x || 0,
-          gForceY: telemetry.gForce?.y || 0
+          rpm: currentTelemetry.rpm,
+          speed: currentTelemetry.speed,
+          powerHp: currentTelemetry.powerHp,
+          torque: currentTelemetry.torque,
+          accel: currentTelemetry.inputs.accel,
+          brake: currentTelemetry.inputs.brake,
+          steer: currentTelemetry.inputs.steer,
+          gForceX: currentTelemetry.gForce?.x || 0,
+          gForceY: currentTelemetry.gForce?.y || 0
         };
 
         return [...prev, nextPoint];
@@ -108,7 +123,7 @@ function App() {
         clearInterval(captureIntervalRef.current);
       }
     };
-  }, [captureActive, telemetry]);
+  }, [captureActive]);
 
   const drawGMeter = (gForce) => {
     const canvas = canvasRef.current;
@@ -303,6 +318,75 @@ function App() {
     setAnalysisReport(findings);
   };
 
+  const analyzeSession = () => {
+    const data = sessionData.current;
+    if (data.length === 0) return;
+
+    const report = [];
+    const maxRpm = Math.max(...data.map((d) => d.rpm));
+    const engineRedline = data[0]?.maxRpm || 0;
+
+    const hasSuspension = data.every((d) => d.suspension && d.suspension.fl != null && d.suspension.fr != null && d.suspension.rl != null && d.suspension.rr != null);
+    const hasTireTemp = data.every((d) => d.tireTemp && d.tireTemp.fl != null && d.tireTemp.fr != null && d.tireTemp.rl != null && d.tireTemp.rr != null);
+
+    const minSuspension = hasSuspension
+      ? Math.min(...data.map((d) => Math.min(d.suspension.fl, d.suspension.fr, d.suspension.rl, d.suspension.rr)))
+      : null;
+    const maxTireTemp = hasTireTemp
+      ? Math.max(...data.map((d) => Math.max(d.tireTemp.fl, d.tireTemp.fr, d.tireTemp.rl, d.tireTemp.rr)))
+      : null;
+
+    if (engineRedline && maxRpm < engineRedline * 0.85) {
+      report.push({ type: 'warning', text: "Le moteur n'est pas exploité à fond. Raccourcissez le rapport de transmission final." });
+    }
+
+    if (hasSuspension) {
+      if (minSuspension <= 0.05) {
+        report.push({ type: 'danger', text: "Talonnage détecté (Châssis touche le sol). Augmentez la hauteur de caisse ou durcissez les ressorts/barres anti-roulis." });
+      } else {
+        report.push({ type: 'success', text: "Suspension saine, aucun talonnage critique." });
+      }
+    }
+
+    if (hasTireTemp && maxTireTemp > 110) {
+      report.push({ type: 'danger', text: `Surchauffe pneumatique (${Math.round(maxTireTemp)}°C). Baissez la pression des pneus ou réduisez l'angle de carrossage.` });
+    }
+
+    setAnalysisReport(report);
+  };
+
+  const exportToCSV = () => {
+    const data = sessionData.current;
+    if (data.length === 0) return;
+
+    const headers = 'Timestamp,Speed_Kmh,RPM,Gear,Susp_FL,Susp_FR,Temp_FL_C,Temp_FR_C\n';
+    const rows = data.map((d) => {
+      return `${d.timestamp},${d.speed.toFixed(1)},${d.rpm.toFixed(0)},${d.gear},${d.suspension?.fl?.toFixed(3) || ''},${d.suspension?.fr?.toFixed(3) || ''},${d.tireTemp?.fl?.toFixed(1) || ''},${d.tireTemp?.fr?.toFixed(1) || ''}`;
+    }).join('\n');
+
+    const csvContent = `data:text/csv;charset=utf-8,${headers}${rows}`;
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `telemetry_session_${new Date().getTime()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      setIsRecording(false);
+      analyzeSession();
+      return;
+    }
+
+    sessionData.current = [];
+    setRecordedPoints(0);
+    setAnalysisReport([]);
+    setIsRecording(true);
+  };
+
   if (connectionStatus !== 'connected' || !telemetryReceived) {
     return (
       <div className="dashboard-shell connection-shell">
@@ -385,6 +469,16 @@ function App() {
           </button>
         </div>
 
+        <div className="recording-toolbar">
+          <button type="button" className={`secondary-btn ${isRecording ? 'recording' : ''}`} onClick={toggleRecording}>
+            {isRecording ? 'Arrêter l’enregistrement' : 'Démarrer l’enregistrement'}
+          </button>
+          <button type="button" className="ghost-btn" onClick={exportToCSV} disabled={recordedPoints === 0}>
+            Exporter CSV
+          </button>
+          <span className="recording-meta">{recordedPoints} points enregistrés</span>
+        </div>
+
         <div className="capture-summary">
           <div>
             <span>Points enregistrés</span>
@@ -408,6 +502,23 @@ function App() {
           </div>
         </div>
       </div>
+
+      
+      <section className="card analysis-card">
+        <div className="card-header">
+          <h2>Rapport d’analyse</h2>
+          <span className="card-tag">Recommandations</span>
+        </div>
+
+        <div className="analysis-list">
+          {analysisReport.length > 0 ? analysisReport.map((item) => (
+            <div key={`${item.title}-${item.detail}`} className={`analysis-item ${item.severity || 'info'}`}>
+              <strong>{item.title}</strong>
+              <p>{item.detail}</p>
+            </div>
+          )) : <p className="analysis-empty">Lancez une analyse après une capture pour obtenir un rapport.</p>}
+        </div>
+      </section>
 
       <div className="dashboard-grid">
         <section className="card card-hero">
@@ -597,21 +708,6 @@ function App() {
           </div>
         </section>
 
-        <section className="card analysis-card">
-          <div className="card-header">
-            <h2>Rapport d’analyse</h2>
-            <span className="card-tag">Recommandations</span>
-          </div>
-
-          <div className="analysis-list">
-            {analysisReport.length > 0 ? analysisReport.map((item) => (
-              <div key={`${item.title}-${item.detail}`} className={`analysis-item ${item.severity || 'info'}`}>
-                <strong>{item.title}</strong>
-                <p>{item.detail}</p>
-              </div>
-            )) : <p className="analysis-empty">Lancez une analyse après une capture pour obtenir un rapport.</p>}
-          </div>
-        </section>
       </div>
     </div>
   );
