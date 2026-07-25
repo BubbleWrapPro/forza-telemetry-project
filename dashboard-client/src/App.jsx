@@ -32,6 +32,40 @@ function App() {
   const [telemetryReceived, setTelemetryReceived] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedPoints, setRecordedPoints] = useState(0);
+  const [customMetrics, setCustomMetrics] = useState({
+    rpm: true,
+    speed: true,
+    brake: true,
+    steering: true,
+    gForceX: true,
+    gForceY: true
+  });
+  const [customProfile, setCustomProfile] = useState({
+    name: 'Personnalisé',
+    rpm: { ideal: 7000, min: 5000, max: 9000 },
+    speed: { ideal: 140, min: 80, max: 180 },
+    brake: { ideal: 35, min: 18, max: 70 },
+    steering: { ideal: 20, min: 10, max: 45 },
+    gForceX: { ideal: 1.4, min: 0.8, max: 2.5 },
+    gForceY: { ideal: 1.1, min: 0.5, max: 2.1 }
+  });
+  const availableMetrics = ['rpm', 'speed', 'brake', 'steering', 'gForceX', 'gForceY'];
+  const metricLabels = {
+    rpm: 'RPM',
+    speed: 'Vitesse',
+    brake: 'Freinage',
+    steering: 'Angle volant',
+    gForceX: 'G latéral',
+    gForceY: 'G longitudinal'
+  };
+  const metricUnits = {
+    rpm: 'RPM',
+    speed: 'km/h',
+    brake: '%',
+    steering: '°',
+    gForceX: 'G',
+    gForceY: 'G'
+  };
   const canvasRef = useRef(null);
   const captureIntervalRef = useRef(null);
   const telemetryRef = useRef(telemetry);
@@ -223,39 +257,39 @@ function App() {
     },
     rallye: {
       name: 'Rallye',
-      rpm: { ideal: 6000, min: 4500, max: 7500 },
-      speed: { ideal: 110, min: 70, max: 160 },
-      brake: { ideal: 55, min: 30, max: 85 },
-      steering: { ideal: 25, min: 10, max: 40 },
-      gForceX: { ideal: 1.6, min: 0.8, max: 2.6 },
-      gForceY: { ideal: 1.2, min: 0.5, max: 2.2 }
+      rpm: { ideal: 7000, min: 5200, max: 8600 },
+      speed: { ideal: 120, min: 75, max: 175 },
+      brake: { ideal: 55, min: 35, max: 90 },
+      steering: { ideal: 30, min: 15, max: 55 },
+      gForceX: { ideal: 1.8, min: 0.9, max: 3.0 },
+      gForceY: { ideal: 1.3, min: 0.6, max: 2.4 }
     },
     crossCountry: {
       name: 'Cross country',
-      rpm: { ideal: 5000, min: 3500, max: 6800 },
-      speed: { ideal: 95, min: 60, max: 140 },
-      brake: { ideal: 40, min: 25, max: 70 },
-      steering: { ideal: 18, min: 8, max: 35 },
-      gForceX: { ideal: 1.4, min: 0.7, max: 2.3 },
-      gForceY: { ideal: 1.0, min: 0.4, max: 1.8 }
+      rpm: { ideal: 5600, min: 4000, max: 7300 },
+      speed: { ideal: 95, min: 65, max: 150 },
+      brake: { ideal: 45, min: 30, max: 72 },
+      steering: { ideal: 22, min: 10, max: 40 },
+      gForceX: { ideal: 1.6, min: 0.8, max: 2.5 },
+      gForceY: { ideal: 1.1, min: 0.5, max: 2.0 }
     },
     route: {
       name: 'Route',
-      rpm: { ideal: 3200, min: 2200, max: 4500 },
-      speed: { ideal: 95, min: 60, max: 140 },
-      brake: { ideal: 30, min: 15, max: 60 },
-      steering: { ideal: 10, min: 5, max: 18 },
-      gForceX: { ideal: 0.8, min: 0.4, max: 1.4 },
-      gForceY: { ideal: 0.7, min: 0.3, max: 1.2 }
+      rpm: { ideal: 3400, min: 2300, max: 5200 },
+      speed: { ideal: 100, min: 65, max: 150 },
+      brake: { ideal: 28, min: 15, max: 55 },
+      steering: { ideal: 14, min: 6, max: 25 },
+      gForceX: { ideal: 0.9, min: 0.4, max: 1.6 },
+      gForceY: { ideal: 0.8, min: 0.3, max: 1.5 }
     },
     drift: {
       name: 'Drift',
-      rpm: { ideal: 6500, min: 5000, max: 8000 },
-      speed: { ideal: 80, min: 40, max: 120 },
-      brake: { ideal: 25, min: 10, max: 45 },
-      steering: { ideal: 35, min: 20, max: 55 },
-      gForceX: { ideal: 2.0, min: 1.2, max: 3.0 },
-      gForceY: { ideal: 1.3, min: 0.5, max: 2.2 }
+      rpm: { ideal: 7200, min: 5200, max: 9200 },
+      speed: { ideal: 75, min: 35, max: 110 },
+      brake: { ideal: 28, min: 10, max: 55 },
+      steering: { ideal: 40, min: 22, max: 70 },
+      gForceX: { ideal: 2.4, min: 1.4, max: 3.5 },
+      gForceY: { ideal: 1.8, min: 0.7, max: 2.6 }
     }
   };
 
@@ -267,7 +301,11 @@ function App() {
       return;
     }
 
-    const profile = courseProfiles[analysisType];
+    const profile = analysisType === 'custom' ? customProfile : courseProfiles[analysisType];
+    const metricsToCheck = analysisType === 'custom'
+      ? availableMetrics.filter((metric) => customMetrics[metric])
+      : availableMetrics;
+
     const averages = {
       rpm: captureData.reduce((sum, point) => sum + point.rpm, 0) / captureData.length,
       speed: captureData.reduce((sum, point) => sum + point.speed, 0) / captureData.length,
@@ -286,36 +324,71 @@ function App() {
       gForceY: captureSummary.maxGy
     };
 
-    const findings = [];
-    const addFinding = (title, detail, severity) => findings.push({ title, detail, severity });
+    const details = [];
+    const addFinding = (title, detail, severity) => details.push({ title, detail, severity });
 
-    if (averages.rpm > profile.rpm.max || averages.rpm < profile.rpm.min) {
-      addFinding('RPM hors cible', `Moyenne ${Math.round(averages.rpm)} RPM | pointe ${Math.round(peaks.rpm)} RPM, cible ${profile.rpm.ideal} RPM`, averages.rpm > profile.rpm.max ? 'warning' : 'info');
+    if (metricsToCheck.length === 0) {
+      addFinding('Aucune métrique sélectionnée', 'Active au moins une métrique dans le profil personnalisé pour lancer une comparaison utile.', 'warning');
     }
-    if (averages.speed > profile.speed.max || averages.speed < profile.speed.min) {
-      addFinding('Vitesse hors cible', `Vitesse moy. ${Math.round(averages.speed)} km/h | pointe ${Math.round(peaks.speed)} km/h`, averages.speed > profile.speed.max ? 'warning' : 'info');
-    }
-    if (averages.brake > profile.brake.max || averages.brake < profile.brake.min) {
-      addFinding('Freinage non adapté', `Freinage moyen ${Math.round(averages.brake)}% | pointe ${Math.round(peaks.brake)}%`, 'warning');
-    }
-    if (averages.steering > profile.steering.max || averages.steering < profile.steering.min) {
-      addFinding('Entrée au volant hors cible', `Angle moyen ${Math.round(averages.steering)}° | pointe ${Math.round(peaks.steering)}°`, 'warning');
-    }
-    if (averages.gForceX > profile.gForceX.max || averages.gForceX < profile.gForceX.min) {
-      addFinding('Charge latérale anormale', `G latéral moyen ${averages.gForceX.toFixed(2)} | pointe ${peaks.gForceX.toFixed(2)}`, 'warning');
-    }
-    if (averages.gForceY > profile.gForceY.max || averages.gForceY < profile.gForceY.min) {
-      addFinding('Charge longitudinale anormale', `G long moyen ${averages.gForceY.toFixed(2)} | pointe ${peaks.gForceY.toFixed(2)}`, 'warning');
-    }
+
+    const formatValue = (metric, value) => `${metricLabels[metric]} ${typeof value === 'number' ? Math.round(value * (metric.includes('G') ? 100 : 1)) / (metric.includes('G') ? 100 : 1) : value} ${metricUnits[metric]}`;
+
+    metricsToCheck.forEach((metric) => {
+      const range = profile[metric];
+      if (!range) return;
+      const value = averages[metric];
+      const peak = peaks[metric];
+
+      if (value < range.min) {
+        const severity = (range.min - value) / range.min > 0.18 ? 'critical' : 'warning';
+        let detail = `Moyenne ${formatValue(metric, value)} sous la cible minimale ${formatValue(metric, range.min)}.`;
+        if (metric === 'rpm') {
+          detail = `Moteur sous-utilisé : ${formatValue(metric, value)} moyen. Considérez un rapport plus court ou une montée en régime plus précoce.`;
+        } else if (metric === 'speed') {
+          detail = `Vitesse moyenne ${formatValue(metric, value)} trop basse, probablement un tracé lent ou un rapport mal adapté.`;
+        } else if (metric === 'brake') {
+          detail = `Freinage trop léger pour ce profil : ${formatValue(metric, value)}. Vous pouvez gagner en stabilité et en vitesse en chargeant mieux la phase de freinage.`;
+        } else if (metric === 'steering') {
+          detail = `Angle de braquage moyen ${formatValue(metric, value)} faible : manque d’engagement dans les enchaînements serrés.`;
+        } else if (metric === 'gForceX') {
+          detail = `Charge latérale moyenne ${formatValue(metric, value)} faible : vous n’exploitez pas pleinement les appuis en virage.`;
+        } else if (metric === 'gForceY') {
+          detail = `Charge longitudinale moyenne ${formatValue(metric, value)} faible : l’accélération/freinage est trop progressive.`;
+        }
+        addFinding(`${metricLabels[metric]} trop bas`, `${detail} Pic ${formatValue(metric, peak)}.`, severity);
+      } else if (value > range.max) {
+        const severity = (value - range.max) / range.max > 0.18 ? 'critical' : 'warning';
+        let detail = `Moyenne ${formatValue(metric, value)} au-dessus de la cible maximale ${formatValue(metric, range.max)}.`;
+        if (metric === 'rpm') {
+          detail = `Régime moteur trop élevé en permanence : ${formatValue(metric, value)} moyen. Vérifiez les points de passage et le rapport final.`;
+        } else if (metric === 'speed') {
+          detail = `Vitesse moyenne ${formatValue(metric, value)} trop élevée pour une trajectoire propre. Risque de sortie de piste ou de sous-virage.`;
+        } else if (metric === 'brake') {
+          detail = `Freinage agressif détecté : ${formatValue(metric, value)} moyen. Surveillez la température des disques et la stabilité du freinage.`;
+        } else if (metric === 'steering') {
+          detail = `Trop de braquage moyen ${formatValue(metric, value)} : possible survirage ou besoin de correction.`;
+        } else if (metric === 'gForceX') {
+          detail = `Charge latérale élevée ${formatValue(metric, value)} : le châssis travaille fort, vérifier l’équilibre des pneus et l’appui.`;
+        } else if (metric === 'gForceY') {
+          detail = `Charge longitudinale élevée ${formatValue(metric, value)} : danger de blocage ou patinage sous freinage/accélération.`;
+        }
+        addFinding(`${metricLabels[metric]} trop haut`, `${detail} Pic ${formatValue(metric, peak)}.`, severity);
+      } else {
+        addFinding(`${metricLabels[metric]} dans la fenêtre`, `${formatValue(metric, value)} est bien aligné avec le profil ${profile.name}.`, 'ok');
+      }
+    });
+
     if (captureSummary.bigChanges > 8) {
-      addFinding('Surtensions fréquentes', `Le profil montre ${captureSummary.bigChanges} changements marqués, à vérifier sur la gestion de charge et de freinage.`, 'critical');
+      addFinding('Variations de pilotage marquées', `Le jeu de données contient ${captureSummary.bigChanges} changements brusques. Contrôlez le freinage et la charge pour stabiliser le produit.`, 'critical');
+    } else if (captureSummary.bigChanges > 4) {
+      addFinding('Profil instable', `Il y a ${captureSummary.bigChanges} variations importantes. Recherchez une conduite plus lissée pour améliorer la constance.`, 'warning');
     }
 
-    if (findings.length === 0) {
-      addFinding('Aucun point d’attention majeur', `Le profil enregistré semble cohérent avec ${profile.name}.`, 'ok');
+    if (details.length === 0) {
+      addFinding('Analyse propre', `Le segment est cohérent avec le profil ${profile.name}. Passe à l’ajustement de la configuration ou augmente l’agressivité du pilotage.`, 'ok');
     }
 
-    setAnalysisReport(findings);
+    setAnalysisReport(details);
   };
 
   const analyzeSession = () => {
@@ -462,12 +535,78 @@ function App() {
               <option value="crossCountry">Cross country</option>
               <option value="route">Route</option>
               <option value="drift">Drift</option>
+              <option value="custom">Personnalisé</option>
             </select>
           </label>
           <button type="button" className="primary-btn" onClick={analyzeCapture}>
             Lancer l’analyse
           </button>
         </div>
+
+        {analysisType === 'custom' && (
+          <div className="custom-profile-panel">
+            <div className="profile-panel-header">
+              <div>
+                <h3>Profil personnalisé</h3>
+                <p>Choisis les métriques à comparer et définis les plages de performance attendues.</p>
+              </div>
+            </div>
+
+            <div className="profile-metric-grid">
+              {availableMetrics.map((metric) => (
+                <div key={metric} className="profile-metric-row">
+                  <label className="metric-toggle">
+                    <input
+                      type="checkbox"
+                      checked={customMetrics[metric]}
+                      onChange={() => setCustomMetrics((prev) => ({ ...prev, [metric]: !prev[metric] }))}
+                    />
+                    <span>{metricLabels[metric]}</span>
+                  </label>
+
+                  <div className="metric-range-inputs">
+                    <label>
+                      Min
+                      <input
+                        type="number"
+                        value={customProfile[metric].min}
+                        onChange={(event) => setCustomProfile((prev) => ({
+                          ...prev,
+                          [metric]: { ...prev[metric], min: Number(event.target.value) }
+                        }))}
+                        disabled={!customMetrics[metric]}
+                      />
+                    </label>
+                    <label>
+                      Idéal
+                      <input
+                        type="number"
+                        value={customProfile[metric].ideal}
+                        onChange={(event) => setCustomProfile((prev) => ({
+                          ...prev,
+                          [metric]: { ...prev[metric], ideal: Number(event.target.value) }
+                        }))}
+                        disabled={!customMetrics[metric]}
+                      />
+                    </label>
+                    <label>
+                      Max
+                      <input
+                        type="number"
+                        value={customProfile[metric].max}
+                        onChange={(event) => setCustomProfile((prev) => ({
+                          ...prev,
+                          [metric]: { ...prev[metric], max: Number(event.target.value) }
+                        }))}
+                        disabled={!customMetrics[metric]}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="recording-toolbar">
           <button type="button" className={`secondary-btn ${isRecording ? 'recording' : ''}`} onClick={toggleRecording}>
@@ -498,7 +637,7 @@ function App() {
           </div>
           <div>
             <span>Profil ciblé</span>
-            <strong>{courseProfiles[analysisType].name}</strong>
+            <strong>{analysisType === 'custom' ? customProfile.name : courseProfiles[analysisType]?.name}</strong>
           </div>
         </div>
       </div>

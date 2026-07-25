@@ -196,6 +196,117 @@ h2 {
   padding: 0.6rem 0.75rem;
 }
 
+.recording-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.secondary-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #f8fafc;
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.secondary-btn.recording {
+  background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+  color: #07111f;
+}
+
+.recording-meta {
+  color: #94a3b8;
+  font-size: 0.95rem;
+}
+
+.custom-profile-panel {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.profile-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.profile-panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.profile-panel-header p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 0.95rem;
+  max-width: 38rem;
+}
+
+.profile-metric-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.profile-metric-row {
+  display: grid;
+  grid-template-columns: 1fr 2.2fr;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.85rem;
+  border-radius: 16px;
+  background: rgba(7, 16, 29, 0.78);
+}
+
+.metric-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.metric-toggle input {
+  width: 1rem;
+  height: 1rem;
+}
+
+.metric-range-inputs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.metric-range-inputs label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: #cbd5e1;
+}
+
+.metric-range-inputs input {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #f8fafc;
+  padding: 0.6rem 0.75rem;
+}
+
+.metric-range-inputs input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .capture-summary {
   margin-top: 1rem;
   padding-top: 1rem;
