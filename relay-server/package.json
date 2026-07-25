@@ -1,0 +1,21 @@
+{
+  "name": "relay-server",
+  "version": "1.0.0",
+  "description": "server that act as a relay to redirect forza telemetry data",
+  "keywords": [],
+  "license": "ISC",
+  "author": "papierbulle",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.8",
+    "cors": "^2.8.6",
+    "dgram": "^1.0.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  }
+}
