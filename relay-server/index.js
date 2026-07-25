@@ -36,30 +36,41 @@ udpSocket.on('message', async (msg) => {
         const isRaceOn = msg.readInt32LE(0);
         if (isRaceOn !== 1) return;
 
-        // Décodage binaire (Little-Endian)
+        // --- MOTEUR & TRANSMISSION ---
+        const engineMaxRpm = msg.readFloatLE(8);
+        const engineIdleRpm = msg.readFloatLE(12);
         const currentEngineRpm = msg.readFloatLE(16);
-        const speed = msg.readFloatLE(256) * 3.6; // Conversion m/s en km/h
-        const gear = msg.readUInt8(307); // Rapport de boîte (0 = R, 1-10)
-        
-        // Créativité : G-Force pour une Heatmap
+        const speed = msg.readFloatLE(256) * 3.6; // km/h
+        const powerHp = msg.readFloatLE(260) / 745.7; // Watts convertis en Chevaux
+        const torque = msg.readFloatLE(264); // Nm
+        const gear = msg.readUInt8(319); // Correction de l'offset ici !
+
+        // --- PÉDALES & VOLANT ---
+        const accel = msg.readUInt8(315); // Valeur de 0 à 255
+        const brake = msg.readUInt8(316); // Valeur de 0 à 255
+        const steer = msg.readInt8(320);  // Valeur de -127 (Gauche) à 127 (Droite)
+
+        // --- DYNAMIQUE (G-Force) ---
         const gForceLat = msg.readFloatLE(44);
         const gForceLon = msg.readFloatLE(48);
 
-        // Analyse des temps au tour
-        const currentLap = msg.readUInt16LE(300);
-        const lastLap = msg.readFloatLE(292);
+        // --- TEMPS AU TOUR ---
+        const lastLap = msg.readFloatLE(300); // Correction de l'offset du temps au tour
 
-        // Sauvegarde en base de données à chaque nouveau tour validé
         if (lastLap > 0 && lastLap !== lastLapTime) {
             lastLapTime = lastLap;
             await supabase.from('laptimes').insert([{ lap_time: lastLap }]);
         }
 
-        // Diffusion en temps réel au Dashboard Front-end
         io.emit('telemetry', {
             rpm: currentEngineRpm,
+            maxRpm: engineMaxRpm,
+            idleRpm: engineIdleRpm,
             speed: speed,
             gear: gear === 0 ? 'R' : gear,
+            powerHp: powerHp,
+            torque: torque,
+            inputs: { accel, brake, steer },
             gForce: { x: gForceLat, y: gForceLon }
         });
     }
