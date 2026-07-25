@@ -86,8 +86,15 @@ L'interface web développée avec Vite et React.
 ```bash
 cd ../dashboard-client
 npm install
-
 ```
+
+Créez un fichier `.env` ou `.env.local` à la racine de `dashboard-client` avec votre URL ngrok :
+
+```env
+VITE_NGROK_URL=https://votre-url-ngrok.ngrok-free.app
+```
+
+Ne poussez pas ce fichier dans votre dépôt : il contient une URL personnelle ngrok.
 
 Dans `vite.config.js`, assurez-vous que les chemins relatifs sont activés pour le build :
 
@@ -96,7 +103,6 @@ export default defineConfig({
   plugins: [react()],
   base: './',
 })
-
 ```
 
 ## 🎮 Configuration du Jeu
@@ -118,14 +124,10 @@ ngrok http 3000
 
 
 2. **Configuration du Frontend :**
-Dans `dashboard-client/src/App.jsx`, mettez à jour l'URL du WebSocket avec l'adresse HTTPS fournie par ngrok, en conservant l'en-tête de contournement :
-```javascript
-const socket = io('https://VOTRE_URL_NGROK.ngrok-free.app', {
-  extraHeaders: { "ngrok-skip-browser-warning": "true" }
-});
-
+Copiez l'URL HTTPS fournie par ngrok dans `dashboard-client/.env` :
+```env
+VITE_NGROK_URL=https://votre-url-ngrok.ngrok-free.app
 ```
-
 
 3. **Build :**
 ```bash
@@ -136,6 +138,10 @@ npm run build
 
 4. **Hébergement :**
 Transférez le contenu du dossier `dashboard-client/dist/` à la racine de votre site de type "Fichiers statiques" sur Alwaysdata via FTP.
+
+> Si ngrok n'est pas installé, téléchargez-le ici : https://ngrok.com/download
+> 
+> Créez un compte ngrok pour obtenir une URL stable et garder votre URL privée hors du code.
 
 ## 🏁 Utilisation
 

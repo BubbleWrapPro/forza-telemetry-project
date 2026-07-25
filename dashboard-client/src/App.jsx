@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
 
-const socket = io('https://swirl-charm-preface.ngrok-free.dev', {
+const ngrokUrl = import.meta.env.VITE_NGROK_URL;
+const socket = io(ngrokUrl || undefined, {
   extraHeaders: {
     'ngrok-skip-browser-warning': 'true'
   }
