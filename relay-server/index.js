@@ -19,7 +19,12 @@ const supabase = createClient(
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+const io = new Server(server, { 
+    cors: { 
+        origin: 'https://theriaud.alwaysdata.net', // Autorise spécifiquement mon hébergement
+        methods: ["GET", "POST"]
+    } 
+});
 
 const FORZA_PORT = 5607;
 const udpSocket = dgram.createSocket('udp4');

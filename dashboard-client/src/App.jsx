@@ -4,7 +4,11 @@ import './App.css'; // S'assurer d'y définir background-color: #121212; color: 
 
 // Connexion au serveur relais local. 
 // Remplacer localhost par l'IP de la machine Windows si consultation depuis un smartphone/tablette.
-const socket = io(' https://swirl-charm-preface.ngrok-free.dev');
+const socket = io('https://swirl-charm-preface.ngrok-free.dev', {
+  extraHeaders: {
+    "ngrok-skip-browser-warning": "true"
+  }
+});
 
 function App() {
   const [telemetry, setTelemetry] = useState({ rpm: 0, speed: 0, gear: 0, gForce: { x: 0, y: 0 } });
