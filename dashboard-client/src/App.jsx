@@ -68,9 +68,10 @@ function App() {
   const [connectionStatus, setConnectionStatus] = useState('pending');
   const [connectionMessage, setConnectionMessage] = useState('Connexion au serveur...');
   const [telemetryReceived, setTelemetryReceived] = useState(false);
+  const [offlineMode, setOfflineMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedPoints, setRecordedPoints] = useState(0);
-  const [profiles, setProfiles] = useState(() => createProfileSnapshot(analysisProfiles));
+  const [profiles] = useState(() => createProfileSnapshot(analysisProfiles));
   const [customMetrics, setCustomMetrics] = useState(() => {
     if (typeof window === 'undefined') return defaultCustomMetrics;
     try {
@@ -94,15 +95,45 @@ function App() {
   const canvasRef = useRef(null);
   const captureIntervalRef = useRef(null);
   const telemetryRef = useRef(telemetry);
+  const renderTelemetryTimerRef = useRef(null);
+  const lastTelemetryRenderRef = useRef(0);
+  const gMeterFrameRef = useRef(null);
+  const latestGForceRef = useRef(telemetry.gForce);
   const isRecordingRef = useRef(isRecording);
   const sessionData = useRef([]);
 
   useEffect(() => {
     const handleTelemetry = (data) => {
-      setTelemetry(data);
       setTelemetryReceived(true);
-      drawGMeter(data.gForce);
       telemetryRef.current = data;
+      latestGForceRef.current = data.gForce || { x: 0, y: 0 };
+      setOfflineMode(false);
+
+      // Le jeu peut envoyer plusieurs centaines de paquets par seconde. On garde
+      // toutes les données utiles en ref, mais on limite le rendu de l'UI à 10 Hz.
+      const now = Date.now();
+      const elapsed = now - lastTelemetryRenderRef.current;
+      const commitTelemetry = () => {
+        lastTelemetryRenderRef.current = Date.now();
+        renderTelemetryTimerRef.current = null;
+        setTelemetry(telemetryRef.current);
+      };
+      if (elapsed >= 100) {
+        if (renderTelemetryTimerRef.current) {
+          clearTimeout(renderTelemetryTimerRef.current);
+          renderTelemetryTimerRef.current = null;
+        }
+        commitTelemetry();
+      } else if (!renderTelemetryTimerRef.current) {
+        renderTelemetryTimerRef.current = setTimeout(commitTelemetry, 100 - elapsed);
+      }
+
+      if (!gMeterFrameRef.current) {
+        gMeterFrameRef.current = requestAnimationFrame(() => {
+          gMeterFrameRef.current = null;
+          drawGMeter(latestGForceRef.current);
+        });
+      }
       if (isRecordingRef.current) {
         sessionData.current.push(data);
         setRecordedPoints((prev) => prev + 1);
@@ -141,8 +172,14 @@ function App() {
       socket.off('disconnect', handleDisconnect);
       socket.off('connect_error', handleConnectError);
       socket.off('error', handleError);
+      if (renderTelemetryTimerRef.current) clearTimeout(renderTelemetryTimerRef.current);
+      if (gMeterFrameRef.current) cancelAnimationFrame(gMeterFrameRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    drawGMeter(telemetry.gForce);
+  }, [telemetry.gForce]);
 
   useEffect(() => {
     isRecordingRef.current = isRecording;
@@ -196,24 +233,37 @@ function App() {
     };
   }, [captureActive]);
 
-  const drawGMeter = (gForce) => {
+  const drawGMeter = (gForce = { x: 0, y: 0 }) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
-    const scale = 50;
+    const maxG = 2.5;
+    const scale = 70 / maxG;
+    const x = Math.max(-maxG, Math.min(maxG, Number(gForce.x) || 0));
+    const y = Math.max(-maxG, Math.min(maxG, Number(gForce.y) || 0));
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = 1;
+    [28, 56, 84].forEach((radius) => {
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+      ctx.stroke();
+    });
+
     ctx.beginPath();
-    ctx.arc(centerX, centerY, 70, 0, 2 * Math.PI);
+    ctx.moveTo(centerX - 88, centerY);
+    ctx.lineTo(centerX + 88, centerY);
+    ctx.moveTo(centerX, centerY - 88);
+    ctx.lineTo(centerX, centerY + 88);
     ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 2;
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(centerX + gForce.x * scale, centerY - gForce.y * scale, 6, 0, 2 * Math.PI);
+    ctx.arc(centerX + x * scale, centerY - y * scale, 7, 0, 2 * Math.PI);
     ctx.fillStyle = '#ff3366';
     ctx.fill();
   };
@@ -249,20 +299,34 @@ function App() {
     thermalStatus.label !== 'OK' ? `Thermique ${thermalStatus.label.toLowerCase()} : ${thermalStress}% de charge.` : null
   ].filter(Boolean);
 
+  const temperatureColor = (temperature) => {
+    if (!Number.isFinite(temperature)) return 'rgba(71, 85, 105, 0.72)';
+    if (temperature < 65) return '#38bdf8';
+    if (temperature < 85) return '#22c55e';
+    if (temperature < 105) return '#facc15';
+    return '#f87171';
+  };
   const wheelTemps = [
-    { name: 'AV G', current: Math.max(60, Math.min(115, 72 + (tireStress / 8) + (speed / 12))), max: Math.max(80, Math.min(125, 90 + (tireStress / 6))) },
-    { name: 'AV D', current: Math.max(60, Math.min(115, 74 + (tireStress / 7) + (speed / 14))), max: Math.max(80, Math.min(125, 92 + (tireStress / 6))) },
-    { name: 'AR G', current: Math.max(60, Math.min(115, 70 + (tireStress / 9) + (speed / 11))), max: Math.max(80, Math.min(125, 88 + (tireStress / 5))) },
-    { name: 'AR D', current: Math.max(60, Math.min(115, 73 + (tireStress / 8) + (speed / 13))), max: Math.max(80, Math.min(125, 91 + (tireStress / 6))) }
-  ];
+    { name: 'AV G', value: telemetry.tireTemp?.fl },
+    { name: 'AV D', value: telemetry.tireTemp?.fr },
+    { name: 'AR G', value: telemetry.tireTemp?.rl },
+    { name: 'AR D', value: telemetry.tireTemp?.rr }
+  ].map((wheel) => ({ ...wheel, current: Number.isFinite(wheel.value) ? wheel.value : null }));
 
-  const suspensionTemps = [
-    { name: 'Avant', current: Math.max(45, Math.min(100, 55 + (suspensionLoad / 5) + (Math.abs(steeringAngle) / 8))), max: Math.max(60, Math.min(110, 70 + (suspensionLoad / 4))) },
-    { name: 'Arrière', current: Math.max(45, Math.min(100, 58 + (suspensionLoad / 6) + (speed / 25))), max: Math.max(60, Math.min(110, 74 + (suspensionLoad / 4))) }
-  ];
+  const suspensionTravel = [
+    { name: 'AV G', value: telemetry.suspension?.fl },
+    { name: 'AV D', value: telemetry.suspension?.fr },
+    { name: 'AR G', value: telemetry.suspension?.rl },
+    { name: 'AR D', value: telemetry.suspension?.rr }
+  ].map((corner) => ({ ...corner, current: Number.isFinite(corner.value) ? corner.value : null }));
 
-  const avgTemp = Math.round(wheelTemps.reduce((sum, wheel) => sum + wheel.current, 0) / wheelTemps.length);
-  const peakTemp = Math.max(...wheelTemps.map((wheel) => wheel.max));
+  const availableWheelTemps = wheelTemps.filter((wheel) => wheel.current !== null);
+  const avgTemp = availableWheelTemps.length
+    ? Math.round(availableWheelTemps.reduce((sum, wheel) => sum + wheel.current, 0) / availableWheelTemps.length)
+    : null;
+  const maxSuspensionTravel = suspensionTravel.some((corner) => corner.current !== null)
+    ? Math.round(Math.max(...suspensionTravel.filter((corner) => corner.current !== null).map((corner) => corner.current)) * 100)
+    : null;
 
   const captureSummary = captureData.length === 0
     ? { points: 0, maxRpm: 0, maxSpeed: 0, maxBrake: 0, maxSteer: 0, maxGx: 0, maxGy: 0, bigChanges: 0 }
@@ -283,8 +347,6 @@ function App() {
       };
 
   const courseProfiles = profiles;
-
-  const shouldShowConnectionScreen = connectionStatus !== 'connected' || !telemetryReceived;
 
   const resetCustomProfile = () => {
     setCustomMetrics(defaultCustomMetrics);
@@ -456,7 +518,7 @@ function App() {
     setIsRecording(true);
   };
 
-  if (connectionStatus !== 'connected' || !telemetryReceived) {
+  if ((connectionStatus !== 'connected' || !telemetryReceived) && !offlineMode) {
     return (
       <div className="dashboard-shell connection-shell">
         <div className="connection-panel">
@@ -469,6 +531,10 @@ function App() {
           {(connectionStatus === 'disconnected' || connectionStatus === 'error') && (
             <p className="connection-detail">Vérifier le serveur relay ou la connexion entre le jeu et ce poste avant de continuer.</p>
           )}
+          <button type="button" className="primary-btn offline-access-btn" onClick={() => setOfflineMode(true)}>
+            Accéder à l’interface hors ligne
+          </button>
+          <p className="connection-detail">Le mode hors ligne affiche des valeurs de démonstration à zéro : aucun test ni diagnostic n’est effectué en direct.</p>
         </div>
       </div>
     );
@@ -481,8 +547,14 @@ function App() {
           <p className="eyebrow">Forza telemetry</p>
           <h1>Dashboard télémétrique</h1>
         </div>
-        <div className="status-pill">Live data</div>
+        <div className={`status-pill ${offlineMode ? 'offline-status' : ''}`}>{offlineMode ? 'Mode hors ligne' : 'Données live'}</div>
       </header>
+
+      {offlineMode && (
+        <div className="offline-banner" role="status">
+          Mode hors ligne : le jeu ou le relay-server n’envoie aucune donnée. Les valeurs affichées ne sont pas des mesures live.
+        </div>
+      )}
 
       <div className="capture-panel">
         <div className="capture-controls">
@@ -799,6 +871,7 @@ function App() {
 
           <div className="g-meter-wrap">
             <canvas ref={canvasRef} width={220} height={220} className="g-meter-canvas" />
+            <p className="g-meter-legend">← charge latérale gauche · droite →<br />↑ / ↓ charge longitudinale · ±2,5 G</p>
             <div className="g-metric-list">
               <div className="g-metric-item">
                 <span>Latéral</span>
@@ -858,30 +931,30 @@ function App() {
             <div className="expert-panel">
               <div className="expert-panel-header">
                 <h3>Températures pneus</h3>
-                <span>{avgTemp}°C moyen</span>
+                <span>{avgTemp === null ? 'En attente' : `${avgTemp}°C moyen`}</span>
               </div>
-              <div className="expert-list">
+              <div className="tire-heatmap" aria-label="Heatmap des températures des pneus">
                 {wheelTemps.map((wheel) => (
-                  <div key={wheel.name} className="expert-row">
+                  <div key={wheel.name} className="tire-heatmap-cell" style={{ '--tire-temperature': temperatureColor(wheel.current) }}>
                     <span>{wheel.name}</span>
-                    <strong>{Math.round(wheel.current)}°C</strong>
-                    <small>max {Math.round(wheel.max)}°C</small>
+                    <strong>{wheel.current === null ? '—' : `${Math.round(wheel.current)}°C`}</strong>
                   </div>
                 ))}
               </div>
+              <p className="heatmap-legend">Bleu : froid · vert : optimal · jaune : chaud · rouge : surchauffe</p>
             </div>
 
             <div className="expert-panel">
               <div className="expert-panel-header">
-                <h3>Températures suspension</h3>
-                <span>{peakTemp}°C max</span>
+                <h3>Débattement suspension</h3>
+                <span>{maxSuspensionTravel === null ? 'En attente' : `${maxSuspensionTravel}% max`}</span>
               </div>
               <div className="expert-list">
-                {suspensionTemps.map((item) => (
-                  <div key={item.name} className="expert-row">
-                    <span>{item.name}</span>
-                    <strong>{Math.round(item.current)}°C</strong>
-                    <small>max {Math.round(item.max)}°C</small>
+                {suspensionTravel.map((corner) => (
+                  <div key={corner.name} className="expert-row">
+                    <span>{corner.name}</span>
+                    <strong>{corner.current === null ? '—' : `${Math.round(corner.current * 100)}%`}</strong>
+                    <small>{corner.current === null ? 'en attente' : `${corner.current.toFixed(3)} normalisé`}</small>
                   </div>
                 ))}
               </div>

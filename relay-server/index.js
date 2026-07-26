@@ -63,11 +63,14 @@ udpSocket.on('message', async (msg) => {
         const suspRL = msg.readFloatLE(76);
         const suspRR = msg.readFloatLE(80);
 
-        // Température des pneus (en Fahrenheit, à convertir en Celsius)
-        const tempFL = (msg.readFloatLE(120) - 32) * (5/9);
-        const tempFR = (msg.readFloatLE(124) - 32) * (5/9);
-        const tempRL = (msg.readFloatLE(128) - 32) * (5/9);
-        const tempRR = (msg.readFloatLE(132) - 32) * (5/9);
+        // Températures pneus dans le format Horizon (paquet de 324 octets).
+        // Les offsets 120-132 sont des données de piste, pas les températures :
+        // leur lecture donnait donc -18 °C après conversion d'une valeur nulle.
+        const fahrenheitToCelsius = (value) => (value - 32) * (5 / 9);
+        const tempFL = fahrenheitToCelsius(msg.readFloatLE(268));
+        const tempFR = fahrenheitToCelsius(msg.readFloatLE(272));
+        const tempRL = fahrenheitToCelsius(msg.readFloatLE(276));
+        const tempRR = fahrenheitToCelsius(msg.readFloatLE(280));
 
         // Timestamp pour l'export CSV
         const timestamp = Date.now();

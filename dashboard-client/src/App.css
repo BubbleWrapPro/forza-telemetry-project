@@ -112,6 +112,20 @@ select {
   margin-top: 1rem;
 }
 
+.offline-access-btn {
+  margin-top: 0.75rem;
+}
+
+.offline-banner {
+  margin: -0.35rem 0 1.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(250, 204, 21, 0.42);
+  border-radius: 14px;
+  background: rgba(113, 63, 18, 0.34);
+  color: #fef3c7;
+  line-height: 1.45;
+}
+
 .dashboard-header {
   display: flex;
   justify-content: space-between;
@@ -149,6 +163,12 @@ h2 {
   background: rgba(0, 204, 153, 0.16);
   color: #5ef0bf;
   border: 1px solid rgba(0, 204, 153, 0.3);
+}
+
+.status-pill.offline-status {
+  color: #fef3c7;
+  background: rgba(250, 204, 21, 0.14);
+  border-color: rgba(250, 204, 21, 0.35);
 }
 
 .capture-panel {
@@ -498,6 +518,8 @@ h2 {
   font-size: clamp(3rem, 7vw, 5rem);
   font-weight: 800;
   line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+  min-width: 4.1ch;
 }
 
 .hero-speed span {
@@ -510,6 +532,9 @@ h2 {
   font-size: clamp(2.2rem, 5vw, 3.3rem);
   font-weight: 700;
   color: #00cc99;
+  font-variant-numeric: tabular-nums;
+  min-width: 1.2ch;
+  text-align: center;
 }
 
 .rpm-track {
@@ -556,6 +581,7 @@ h2 {
 .metric-box strong,
 .g-metric-item strong {
   font-size: 1rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .metric-grid {
@@ -662,6 +688,16 @@ h2 {
   border-radius: 50%;
   background: radial-gradient(circle at center, rgba(0, 204, 153, 0.15), rgba(2, 6, 23, 0.95));
   border: 2px solid rgba(148, 163, 184, 0.25);
+  flex: 0 0 220px;
+}
+
+.g-meter-legend {
+  min-height: 2.6em;
+  margin: -0.25rem 0 0;
+  color: #94a3b8;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .g-metric-list {
@@ -835,6 +871,42 @@ h2 {
   gap: 0.45rem;
 }
 
+.tire-heatmap {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.tire-heatmap-cell {
+  min-height: 76px;
+  padding: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--tire-temperature) 70%, transparent);
+  border-radius: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--tire-temperature) 32%, #0f172a), rgba(30, 41, 59, 0.78));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.tire-heatmap-cell span {
+  color: #e2e8f0;
+  font-size: 0.78rem;
+}
+
+.tire-heatmap-cell strong {
+  color: #fff;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.heatmap-legend {
+  margin: 0.7rem 0 0;
+  min-height: 2.6em;
+  color: #94a3b8;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
 .expert-row {
   display: grid;
   grid-template-columns: 1.2fr 0.7fr 0.7fr;
@@ -887,4 +959,3 @@ h2 {
     align-items: flex-start;
   }
 }
-
