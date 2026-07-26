@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
+import { analysisProfiles, analysisMetrics, metricLabels, metricUnits, createProfileSnapshot } from './analysisProfiles';
 
 const ngrokUrl = import.meta.env.VITE_NGROK_URL;
 const socket = io(ngrokUrl || undefined, {
@@ -8,6 +9,43 @@ const socket = io(ngrokUrl || undefined, {
     'ngrok-skip-browser-warning': 'true'
   }
 });
+
+const defaultCustomMetrics = {
+  rpm: true,
+  speed: true,
+  brake: true,
+  steering: true,
+  gForceX: true,
+  gForceY: true
+};
+
+const defaultCustomProfile = {
+  name: 'Personnalisé',
+  description: 'Profil établi par l’utilisateur avec des métriques et seuils sur mesure.',
+  attentionPoints: ['Ajustez ce profil selon votre voiture et votre stratégie.'],
+  rpm: { ideal: 7000, min: 5000, max: 9000 },
+  speed: { ideal: 140, min: 80, max: 180 },
+  brake: { ideal: 35, min: 18, max: 70 },
+  steering: { ideal: 20, min: 10, max: 45 },
+  gForceX: { ideal: 1.4, min: 0.8, max: 2.5 },
+  gForceY: { ideal: 1.1, min: 0.5, max: 2.1 }
+};
+
+const customProfileStorageKey = 'forza-custom-profile-v1';
+const customMetricsStorageKey = 'forza-custom-metrics-v1';
+
+const buildCustomProfileState = (savedValue) => {
+  const nextProfile = { ...defaultCustomProfile, ...(savedValue || {}) };
+  analysisMetrics.forEach((metric) => {
+    nextProfile[metric] = {
+      ...defaultCustomProfile[metric],
+      ...(savedValue?.[metric] || {})
+    };
+  });
+  return nextProfile;
+};
+
+const buildCustomMetricsState = (savedValue) => ({ ...defaultCustomMetrics, ...(savedValue || {}) });
 
 function App() {
   const [telemetry, setTelemetry] = useState({
@@ -32,40 +70,27 @@ function App() {
   const [telemetryReceived, setTelemetryReceived] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedPoints, setRecordedPoints] = useState(0);
-  const [customMetrics, setCustomMetrics] = useState({
-    rpm: true,
-    speed: true,
-    brake: true,
-    steering: true,
-    gForceX: true,
-    gForceY: true
+  const [profiles, setProfiles] = useState(() => createProfileSnapshot(analysisProfiles));
+  const [customMetrics, setCustomMetrics] = useState(() => {
+    if (typeof window === 'undefined') return defaultCustomMetrics;
+    try {
+      const stored = window.localStorage.getItem(customMetricsStorageKey);
+      return stored ? buildCustomMetricsState(JSON.parse(stored)) : defaultCustomMetrics;
+    } catch {
+      return defaultCustomMetrics;
+    }
   });
-  const [customProfile, setCustomProfile] = useState({
-    name: 'Personnalisé',
-    rpm: { ideal: 7000, min: 5000, max: 9000 },
-    speed: { ideal: 140, min: 80, max: 180 },
-    brake: { ideal: 35, min: 18, max: 70 },
-    steering: { ideal: 20, min: 10, max: 45 },
-    gForceX: { ideal: 1.4, min: 0.8, max: 2.5 },
-    gForceY: { ideal: 1.1, min: 0.5, max: 2.1 }
+  const [customProfile, setCustomProfile] = useState(() => {
+    if (typeof window === 'undefined') return defaultCustomProfile;
+    try {
+      const stored = window.localStorage.getItem(customProfileStorageKey);
+      return stored ? buildCustomProfileState(JSON.parse(stored)) : defaultCustomProfile;
+    } catch {
+      return defaultCustomProfile;
+    }
   });
-  const availableMetrics = ['rpm', 'speed', 'brake', 'steering', 'gForceX', 'gForceY'];
-  const metricLabels = {
-    rpm: 'RPM',
-    speed: 'Vitesse',
-    brake: 'Freinage',
-    steering: 'Angle volant',
-    gForceX: 'G latéral',
-    gForceY: 'G longitudinal'
-  };
-  const metricUnits = {
-    rpm: 'RPM',
-    speed: 'km/h',
-    brake: '%',
-    steering: '°',
-    gForceX: 'G',
-    gForceY: 'G'
-  };
+  const [showProfileDetails, setShowProfileDetails] = useState(false);
+  const availableMetrics = analysisMetrics;
   const canvasRef = useRef(null);
   const captureIntervalRef = useRef(null);
   const telemetryRef = useRef(telemetry);
@@ -122,6 +147,18 @@ function App() {
   useEffect(() => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(customMetricsStorageKey, JSON.stringify(customMetrics));
+    }
+  }, [customMetrics]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(customProfileStorageKey, JSON.stringify(customProfile));
+    }
+  }, [customProfile]);
 
   useEffect(() => {
     if (!captureActive) {
@@ -245,55 +282,14 @@ function App() {
         }, 0)
       };
 
-  const courseProfiles = {
-    f1: {
-      name: 'Formule 1',
-      rpm: { ideal: 9000, min: 8000, max: 9800 },
-      speed: { ideal: 180, min: 140, max: 220 },
-      brake: { ideal: 35, min: 20, max: 70 },
-      steering: { ideal: 12, min: 5, max: 25 },
-      gForceX: { ideal: 1.2, min: 0.6, max: 2.1 },
-      gForceY: { ideal: 1.0, min: 0.4, max: 1.8 }
-    },
-    rallye: {
-      name: 'Rallye',
-      rpm: { ideal: 7000, min: 5200, max: 8600 },
-      speed: { ideal: 120, min: 75, max: 175 },
-      brake: { ideal: 55, min: 35, max: 90 },
-      steering: { ideal: 30, min: 15, max: 55 },
-      gForceX: { ideal: 1.8, min: 0.9, max: 3.0 },
-      gForceY: { ideal: 1.3, min: 0.6, max: 2.4 }
-    },
-    crossCountry: {
-      name: 'Cross country',
-      rpm: { ideal: 5600, min: 4000, max: 7300 },
-      speed: { ideal: 95, min: 65, max: 150 },
-      brake: { ideal: 45, min: 30, max: 72 },
-      steering: { ideal: 22, min: 10, max: 40 },
-      gForceX: { ideal: 1.6, min: 0.8, max: 2.5 },
-      gForceY: { ideal: 1.1, min: 0.5, max: 2.0 }
-    },
-    route: {
-      name: 'Route',
-      rpm: { ideal: 3400, min: 2300, max: 5200 },
-      speed: { ideal: 100, min: 65, max: 150 },
-      brake: { ideal: 28, min: 15, max: 55 },
-      steering: { ideal: 14, min: 6, max: 25 },
-      gForceX: { ideal: 0.9, min: 0.4, max: 1.6 },
-      gForceY: { ideal: 0.8, min: 0.3, max: 1.5 }
-    },
-    drift: {
-      name: 'Drift',
-      rpm: { ideal: 7200, min: 5200, max: 9200 },
-      speed: { ideal: 75, min: 35, max: 110 },
-      brake: { ideal: 28, min: 10, max: 55 },
-      steering: { ideal: 40, min: 22, max: 70 },
-      gForceX: { ideal: 2.4, min: 1.4, max: 3.5 },
-      gForceY: { ideal: 1.8, min: 0.7, max: 2.6 }
-    }
-  };
+  const courseProfiles = profiles;
 
   const shouldShowConnectionScreen = connectionStatus !== 'connected' || !telemetryReceived;
+
+  const resetCustomProfile = () => {
+    setCustomMetrics(defaultCustomMetrics);
+    setCustomProfile(defaultCustomProfile);
+  };
 
   const analyzeCapture = () => {
     if (captureData.length < 3) {
@@ -535,21 +531,29 @@ function App() {
               <option value="crossCountry">Cross country</option>
               <option value="route">Route</option>
               <option value="drift">Drift</option>
-              <option value="custom">Personnalisé</option>
+              <option value="custom">Profil personnalisé local</option>
             </select>
           </label>
-          <button type="button" className="primary-btn" onClick={analyzeCapture}>
-            Lancer l’analyse
-          </button>
+          <div className="capture-toolbar-actions">
+            <button type="button" className="ghost-btn" onClick={() => setShowProfileDetails(true)}>
+              Voir le profil
+            </button>
+            <button type="button" className="primary-btn" onClick={analyzeCapture}>
+              Lancer l’analyse
+            </button>
+          </div>
         </div>
 
         {analysisType === 'custom' && (
           <div className="custom-profile-panel">
             <div className="profile-panel-header">
               <div>
-                <h3>Profil personnalisé</h3>
-                <p>Choisis les métriques à comparer et définis les plages de performance attendues.</p>
+                <h3>Profil personnalisé local</h3>
+                <p>Choisis les métriques à comparer et définis les plages de performance attendues. Les modifications sont sauvegardées localement sur cet appareil.</p>
               </div>
+              <button type="button" className="ghost-btn" onClick={resetCustomProfile}>
+                Réinitialiser
+              </button>
             </div>
 
             <div className="profile-metric-grid">
@@ -604,6 +608,44 @@ function App() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {showProfileDetails && (
+          <div className="profile-details-sheet">
+            <div className="profile-details-header">
+              <div>
+                <h3>{(analysisType === 'custom' ? customProfile : courseProfiles[analysisType])?.name}</h3>
+                <p>{(analysisType === 'custom' ? customProfile : courseProfiles[analysisType])?.description}</p>
+              </div>
+              <button type="button" className="ghost-btn" onClick={() => setShowProfileDetails(false)}>Fermer</button>
+            </div>
+            <div className="profile-details-body">
+              <div className="profile-spec-card">
+                <h4>Points d’attention</h4>
+                <ul>
+                  {(analysisType === 'custom' ? customProfile.attentionPoints : courseProfiles[analysisType]?.attentionPoints || []).map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="profile-spec-card">
+                <h4>Seuils de comparaison</h4>
+                <div className="profile-spec-grid">
+                  {availableMetrics.map((metric) => {
+                    const range = (analysisType === 'custom' ? customProfile : courseProfiles[analysisType])?.[metric];
+                    if (!range) return null;
+                    return (
+                      <div key={metric} className="profile-spec-row">
+                        <span>{metricLabels[metric]}</span>
+                        <strong>{range.ideal} {metricUnits[metric]}</strong>
+                        <small>min {range.min} • max {range.max}</small>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         )}

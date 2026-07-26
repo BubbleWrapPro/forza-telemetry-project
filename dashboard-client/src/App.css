@@ -196,6 +196,132 @@ h2 {
   padding: 0.6rem 0.75rem;
 }
 
+.capture-toolbar-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.profile-details-sheet,
+.dev-profile-editor {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.profile-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.profile-details-header h3,
+.dev-profile-editor h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.profile-details-header p,
+.dev-profile-editor p {
+  margin: 0;
+  color: #cbd5e1;
+}
+
+.profile-details-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.profile-spec-card {
+  background: rgba(7, 16, 29, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  padding: 0.9rem;
+}
+
+.profile-spec-card h4 {
+  margin: 0 0 0.7rem;
+  font-size: 0.95rem;
+}
+
+.profile-spec-card ul {
+  margin: 0;
+  padding-left: 1rem;
+  color: #cbd5e1;
+}
+
+.profile-spec-card li + li {
+  margin-top: 0.45rem;
+}
+
+.profile-spec-grid {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.profile-spec-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(30, 41, 59, 0.75);
+  border-radius: 12px;
+  padding: 0.6rem 0.7rem;
+}
+
+.profile-spec-row span {
+  color: #cbd5e1;
+}
+
+.profile-spec-row strong {
+  color: #f8fafc;
+}
+
+.profile-spec-row small {
+  color: #94a3b8;
+}
+
+.dev-profile-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.profile-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.dev-select,
+.dev-input,
+.dev-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: #cbd5e1;
+}
+
+.dev-select select,
+.dev-input input,
+.dev-area textarea {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  background: rgba(7, 16, 29, 0.9);
+  color: #f8fafc;
+  padding: 0.6rem 0.75rem;
+}
+
+.dev-area textarea {
+  min-height: 95px;
+  resize: vertical;
+}
+
 .recording-toolbar {
   display: flex;
   flex-wrap: wrap;
