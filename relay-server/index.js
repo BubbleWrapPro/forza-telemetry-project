@@ -35,27 +35,31 @@ udpSocket.on('message', async (msg) => {
     if (msg.length >= 324) {
         const isRaceOn = msg.readInt32LE(0);
         if (isRaceOn !== 1) return;
+        const isMotorsportDash = msg.length >= 331;
+        const dashboardOffset = isMotorsportDash ? 0 : 12;
 
         // --- MOTEUR & TRANSMISSION ---
         const engineMaxRpm = msg.readFloatLE(8);
         const engineIdleRpm = msg.readFloatLE(12);
         const currentEngineRpm = msg.readFloatLE(16);
-        const speed = msg.readFloatLE(256) * 3.6; // km/h
-        const powerHp = msg.readFloatLE(260) / 745.7; // Watts convertis en Chevaux
-        const torque = msg.readFloatLE(264); // Nm
-        const gear = msg.readUInt8(319); // Correction de l'offset ici !
+        const speed = msg.readFloatLE(244 + dashboardOffset) * 3.6; // km/h
+        const powerHp = msg.readFloatLE(248 + dashboardOffset) / 745.7; // Watts convertis en Chevaux
+        const torque = msg.readFloatLE(252 + dashboardOffset); // Nm
+        const gear = msg.readUInt8(307 + dashboardOffset);
 
         // --- PÉDALES & VOLANT ---
-        const accel = msg.readUInt8(315); // Valeur de 0 à 255
-        const brake = msg.readUInt8(316); // Valeur de 0 à 255
-        const steer = msg.readInt8(320);  // Valeur de -127 (Gauche) à 127 (Droite)
+        const accel = msg.readUInt8(303 + dashboardOffset); // Valeur de 0 à 255
+        const brake = msg.readUInt8(304 + dashboardOffset); // Valeur de 0 à 255
+        const steer = msg.readInt8(308 + dashboardOffset);  // Valeur de -127 (Gauche) à 127 (Droite)
 
         // --- DYNAMIQUE (G-Force) ---
-        const gForceLat = msg.readFloatLE(44);
-        const gForceLon = msg.readFloatLE(48);
+        // Le paquet donne l'accélération en m/s² : X est latéral, Z longitudinal.
+        // Conversion en G pour le G-mètre (les offsets 44/48 sont des vitesses angulaires).
+        const gForceLat = msg.readFloatLE(20) / 9.80665;
+        const gForceLon = msg.readFloatLE(28) / 9.80665;
 
         // --- TEMPS AU TOUR ---
-        const lastLap = msg.readFloatLE(300); // Correction de l'offset du temps au tour
+        const lastLap = msg.readFloatLE(288 + dashboardOffset);
 
         // Suspensions (Débattement normalisé de 0.0 à 1.0)
         const suspFL = msg.readFloatLE(68);
@@ -63,14 +67,23 @@ udpSocket.on('message', async (msg) => {
         const suspRL = msg.readFloatLE(76);
         const suspRR = msg.readFloatLE(80);
 
-        // Températures pneus dans le format Horizon (paquet de 324 octets).
         // Les offsets 120-132 sont des données de piste, pas les températures :
         // leur lecture donnait donc -18 °C après conversion d'une valeur nulle.
         const fahrenheitToCelsius = (value) => (value - 32) * (5 / 9);
-        const tempFL = fahrenheitToCelsius(msg.readFloatLE(268));
-        const tempFR = fahrenheitToCelsius(msg.readFloatLE(272));
-        const tempRL = fahrenheitToCelsius(msg.readFloatLE(276));
-        const tempRR = fahrenheitToCelsius(msg.readFloatLE(280));
+        const tempFL = fahrenheitToCelsius(msg.readFloatLE(256 + dashboardOffset));
+        const tempFR = fahrenheitToCelsius(msg.readFloatLE(260 + dashboardOffset));
+        const tempRL = fahrenheitToCelsius(msg.readFloatLE(264 + dashboardOffset));
+        const tempRR = fahrenheitToCelsius(msg.readFloatLE(268 + dashboardOffset));
+        const tireWear = isMotorsportDash
+            ? {
+                fl: msg.readFloatLE(314), fr: msg.readFloatLE(318),
+                rl: msg.readFloatLE(322), rr: msg.readFloatLE(326)
+            }
+            : null;
+        const tireSlip = {
+            fl: msg.readFloatLE(180), fr: msg.readFloatLE(184),
+            rl: msg.readFloatLE(188), rr: msg.readFloatLE(192)
+        };
 
         // Timestamp pour l'export CSV
         const timestamp = Date.now();
@@ -92,7 +105,9 @@ udpSocket.on('message', async (msg) => {
             gForce: { x: gForceLat, y: gForceLon },
             timestamp: timestamp,
             suspension: { fl: suspFL, fr: suspFR, rl: suspRL, rr: suspRR },
-            tireTemp: { fl: tempFL, fr: tempFR, rl: tempRL, rr: tempRR }
+            tireTemp: { fl: tempFL, fr: tempFR, rl: tempRL, rr: tempRR },
+            tireWear,
+            tireSlip
         });
     }
 });

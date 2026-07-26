@@ -899,6 +899,11 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
+.tire-heatmap-cell small {
+  color: #cbd5e1;
+  font-size: 0.72rem;
+}
+
 .heatmap-legend {
   margin: 0.7rem 0 0;
   min-height: 2.6em;

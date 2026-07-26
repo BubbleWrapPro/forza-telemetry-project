@@ -307,11 +307,16 @@ function App() {
     return '#f87171';
   };
   const wheelTemps = [
-    { name: 'AV G', value: telemetry.tireTemp?.fl },
-    { name: 'AV D', value: telemetry.tireTemp?.fr },
-    { name: 'AR G', value: telemetry.tireTemp?.rl },
-    { name: 'AR D', value: telemetry.tireTemp?.rr }
-  ].map((wheel) => ({ ...wheel, current: Number.isFinite(wheel.value) ? wheel.value : null }));
+    { name: 'AV G', value: telemetry.tireTemp?.fl, wearValue: telemetry.tireWear?.fl, slipValue: telemetry.tireSlip?.fl },
+    { name: 'AV D', value: telemetry.tireTemp?.fr, wearValue: telemetry.tireWear?.fr, slipValue: telemetry.tireSlip?.fr },
+    { name: 'AR G', value: telemetry.tireTemp?.rl, wearValue: telemetry.tireWear?.rl, slipValue: telemetry.tireSlip?.rl },
+    { name: 'AR D', value: telemetry.tireTemp?.rr, wearValue: telemetry.tireWear?.rr, slipValue: telemetry.tireSlip?.rr }
+  ].map((wheel) => ({
+    ...wheel,
+    current: Number.isFinite(wheel.value) ? wheel.value : null,
+    wear: Number.isFinite(wheel.wearValue) ? Math.max(0, Math.min(1, wheel.wearValue)) : null,
+    slip: Number.isFinite(wheel.slipValue) ? Math.abs(wheel.slipValue) : null
+  }));
 
   const suspensionTravel = [
     { name: 'AV G', value: telemetry.suspension?.fl },
@@ -327,6 +332,25 @@ function App() {
   const maxSuspensionTravel = suspensionTravel.some((corner) => corner.current !== null)
     ? Math.round(Math.max(...suspensionTravel.filter((corner) => corner.current !== null).map((corner) => corner.current)) * 100)
     : null;
+  const severelyWornTires = wheelTemps.filter((wheel) => wheel.wear !== null && wheel.wear >= 0.75);
+  const wornTires = wheelTemps.filter((wheel) => wheel.wear !== null && wheel.wear >= 0.5 && wheel.wear < 0.75);
+  const overheatedTires = wheelTemps.filter((wheel) => wheel.current !== null && wheel.current >= 105);
+  const hotTires = wheelTemps.filter((wheel) => wheel.current !== null && wheel.current >= 95 && wheel.current < 105);
+  const slidingTires = wheelTemps.filter((wheel) => wheel.slip !== null && wheel.slip >= 1);
+  const unstableTires = wheelTemps.filter((wheel) => wheel.slip !== null && wheel.slip >= 0.75 && wheel.slip < 1);
+  const compressedSuspension = suspensionTravel.filter((corner) => corner.current !== null && corner.current >= 0.98);
+  const loadedSuspension = suspensionTravel.filter((corner) => corner.current !== null && corner.current >= 0.9 && corner.current < 0.98);
+  const componentAlerts = [
+    ...technicalAlerts,
+    severelyWornTires.length ? `Usure pneus critique : ${severelyWornTires.map((wheel) => `${wheel.name} ${Math.round(wheel.wear * 100)}%`).join(', ')}.` : null,
+    wornTires.length ? `Usure pneus à surveiller : ${wornTires.map((wheel) => `${wheel.name} ${Math.round(wheel.wear * 100)}%`).join(', ')}.` : null,
+    overheatedTires.length ? `Surchauffe pneus : ${overheatedTires.map((wheel) => `${wheel.name} ${Math.round(wheel.current)}°C`).join(', ')}.` : null,
+    hotTires.length ? `Pneus chauds : ${hotTires.map((wheel) => `${wheel.name} ${Math.round(wheel.current)}°C`).join(', ')}.` : null,
+    slidingTires.length ? `Perte d'adhérence détectée : ${slidingTires.map((wheel) => wheel.name).join(', ')}.` : null,
+    unstableTires.length ? `Adhérence à surveiller : ${unstableTires.map((wheel) => wheel.name).join(', ')}.` : null,
+    compressedSuspension.length ? `Talonnage probable : ${compressedSuspension.map((corner) => corner.name).join(', ')} à pleine compression.` : null,
+    loadedSuspension.length ? `Suspension proche de la butée : ${loadedSuspension.map((corner) => corner.name).join(', ')}.` : null
+  ].filter(Boolean);
 
   const captureSummary = captureData.length === 0
     ? { points: 0, maxRpm: 0, maxSpeed: 0, maxBrake: 0, maxSteer: 0, maxGx: 0, maxGy: 0, bigChanges: 0 }
@@ -916,9 +940,9 @@ function App() {
 
           <div className="pit-wall-alerts">
             <h3>Alertes pit wall</h3>
-            {technicalAlerts.length > 0 ? (
+            {componentAlerts.length > 0 ? (
               <ul>
-                {technicalAlerts.map((alert) => (
+                {componentAlerts.map((alert) => (
                   <li key={alert}>{alert}</li>
                 ))}
               </ul>
@@ -938,6 +962,7 @@ function App() {
                   <div key={wheel.name} className="tire-heatmap-cell" style={{ '--tire-temperature': temperatureColor(wheel.current) }}>
                     <span>{wheel.name}</span>
                     <strong>{wheel.current === null ? '—' : `${Math.round(wheel.current)}°C`}</strong>
+                    <small>{wheel.wear === null ? 'Usure : non disponible' : `Usure : ${Math.round(wheel.wear * 100)}%`}</small>
                   </div>
                 ))}
               </div>
