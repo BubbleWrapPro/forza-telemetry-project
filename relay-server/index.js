@@ -1,19 +1,44 @@
+const ws = require('ws');
+
+// prevent error on agent app launch
+process.on('uncaughtException', (err) => {
+    console.error("❌ ERREUR FATALE :", err.message);
+    console.log(err.stack);
+    console.log("\nAppuyez sur 'Entrée' ou fermez la fenêtre pour quitter.");
+    
+    // Garde le processus actif pour lire l'erreur
+    const readline = require('readline').createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+    readline.question('', () => process.exit(1));
+});
+
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+// Détection automatique : sommes-nous dans l'exécutable pkg ou en mode développement ?
+const isCompiled = typeof process.pkg !== 'undefined';
+const baseDir = isCompiled ? path.dirname(process.execPath) : __dirname;
+// Chemin final absolu et sûr pour le fichier de configuration
+const configPath = path.join(baseDir, 'config.json');
 const readline = require('readline');
 const dgram = require('dgram');
+
+
 const { createClient } = require('@supabase/supabase-js');
 
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-  console.error('Erreur critique : SUPABASE_URL et SUPABASE_ANON_KEY doivent être définies.');
-  process.exit(1);
-}
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false }
+const SUPABASE_URL="https://yphsagzixbcrxmeqptpf.supabase.co"
+const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaHNhZ3ppeGJjcnhtZXFwdHBmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5NjQ3NjcsImV4cCI6MjEwMDU0MDc2N30.kQThZTtNGm9Ttr0xGm3yFKtgy6n9FJN6vWI6Zqzhur8"
+
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+  // pkg cible Node 18, qui ne fournit pas WebSocket nativement.
+  // Le transport explicite évite à realtime-js de chercher l'API WebSocket native.
+  realtime: { transport: ws }
 });
-const configPath = path.join(__dirname, 'config.json');
 
 const ask = (question) => new Promise((resolve) => {
   const terminal = readline.createInterface({ input: process.stdin, output: process.stdout });

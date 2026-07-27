@@ -9,11 +9,19 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "package:win": "pkg . --target node22-win-x64 --output forza-telemetry-agent.exe"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
     "dgram": "^1.0.1",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "ws": "^8.21.1"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.21.0"
   }
 }
