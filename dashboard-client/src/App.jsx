@@ -124,6 +124,7 @@ function App() {
   const latestGForceRef = useRef(telemetry.gForce);
   const isRecordingRef = useRef(isRecording);
   const sessionData = useRef([]);
+  const [trackPoints, setTrackPoints] = useState([]);
 
   // Restaure la session au chargement puis suit les connexions/déconnexions sans fuite d'abonnement.
   useEffect(() => {
@@ -254,6 +255,18 @@ function App() {
   useEffect(() => {
     drawGMeter(telemetry.gForce);
   }, [telemetry.gForce]);
+
+  // Historique visuel borné : assez dense pour situer un incident sans croître pendant une longue course.
+  useEffect(() => {
+    const { position } = telemetry;
+    if (!Number.isFinite(position?.x) || !Number.isFinite(position?.z)) return;
+
+    const onRumbleStrip = Object.values(telemetry.wheelOnRumbleStrip || {}).some(Boolean);
+    const bottomingOut = !onRumbleStrip && Object.values(telemetry.suspension || {}).some((travel) => travel >= 0.98);
+    const overheating = Object.values(telemetry.tireTemp || {}).some((temperature) => temperature >= 105);
+    const alert = bottomingOut ? 'bottoming-out' : overheating ? 'overheating' : null;
+    setTrackPoints((previous) => [...previous, { x: position.x, z: position.z, alert }].slice(-600));
+  }, [telemetry]);
 
   // Rend l'état de l'enregistrement lisible par le gestionnaire Realtime sans le réabonner.
   useEffect(() => {
@@ -388,23 +401,24 @@ function App() {
   };
   // Normalise les données optionnelles du relais : null signifie « donnée non disponible », jamais zéro.
   const wheelTemps = [
-    { name: 'AV G', value: telemetry.tireTemp?.fl, wearValue: telemetry.tireWear?.fl, slipValue: telemetry.tireSlip?.fl },
-    { name: 'AV D', value: telemetry.tireTemp?.fr, wearValue: telemetry.tireWear?.fr, slipValue: telemetry.tireSlip?.fr },
-    { name: 'AR G', value: telemetry.tireTemp?.rl, wearValue: telemetry.tireWear?.rl, slipValue: telemetry.tireSlip?.rl },
-    { name: 'AR D', value: telemetry.tireTemp?.rr, wearValue: telemetry.tireWear?.rr, slipValue: telemetry.tireSlip?.rr }
+    { key: 'fl', name: 'AV G', value: telemetry.tireTemp?.fl, slipRatioValue: telemetry.tireSlipRatio?.fl, slipAngleValue: telemetry.tireSlipAngle?.fl, combinedSlipValue: telemetry.tireCombinedSlip?.fl },
+    { key: 'fr', name: 'AV D', value: telemetry.tireTemp?.fr, slipRatioValue: telemetry.tireSlipRatio?.fr, slipAngleValue: telemetry.tireSlipAngle?.fr, combinedSlipValue: telemetry.tireCombinedSlip?.fr },
+    { key: 'rl', name: 'AR G', value: telemetry.tireTemp?.rl, slipRatioValue: telemetry.tireSlipRatio?.rl, slipAngleValue: telemetry.tireSlipAngle?.rl, combinedSlipValue: telemetry.tireCombinedSlip?.rl },
+    { key: 'rr', name: 'AR D', value: telemetry.tireTemp?.rr, slipRatioValue: telemetry.tireSlipRatio?.rr, slipAngleValue: telemetry.tireSlipAngle?.rr, combinedSlipValue: telemetry.tireCombinedSlip?.rr }
   ].map((wheel) => ({
     ...wheel,
     current: Number.isFinite(wheel.value) ? wheel.value : null,
-    wear: Number.isFinite(wheel.wearValue) ? Math.max(0, Math.min(1, wheel.wearValue)) : null,
-    slip: Number.isFinite(wheel.slipValue) ? Math.abs(wheel.slipValue) : null
+    slipRatio: Number.isFinite(wheel.slipRatioValue) ? Math.abs(wheel.slipRatioValue) : null,
+    slipAngle: Number.isFinite(wheel.slipAngleValue) ? Math.abs(wheel.slipAngleValue) : null,
+    combinedSlip: Number.isFinite(wheel.combinedSlipValue) ? Math.abs(wheel.combinedSlipValue) : null
   }));
 
   const suspensionTravel = [
-    { name: 'AV G', value: telemetry.suspension?.fl },
-    { name: 'AV D', value: telemetry.suspension?.fr },
-    { name: 'AR G', value: telemetry.suspension?.rl },
-    { name: 'AR D', value: telemetry.suspension?.rr }
-  ].map((corner) => ({ ...corner, current: Number.isFinite(corner.value) ? corner.value : null }));
+    { name: 'AV G', value: telemetry.suspension?.fl, velocity: telemetry.suspensionVelocity?.fl },
+    { name: 'AV D', value: telemetry.suspension?.fr, velocity: telemetry.suspensionVelocity?.fr },
+    { name: 'AR G', value: telemetry.suspension?.rl, velocity: telemetry.suspensionVelocity?.rl },
+    { name: 'AR D', value: telemetry.suspension?.rr, velocity: telemetry.suspensionVelocity?.rr }
+  ].map((corner) => ({ ...corner, current: Number.isFinite(corner.value) ? corner.value : null, velocity: Number.isFinite(corner.velocity) ? corner.velocity : null }));
 
   const availableWheelTemps = wheelTemps.filter((wheel) => wheel.current !== null);
   const avgTemp = availableWheelTemps.length
@@ -413,18 +427,32 @@ function App() {
   const maxSuspensionTravel = suspensionTravel.some((corner) => corner.current !== null)
     ? Math.round(Math.max(...suspensionTravel.filter((corner) => corner.current !== null).map((corner) => corner.current)) * 100)
     : null;
-  const severelyWornTires = wheelTemps.filter((wheel) => wheel.wear !== null && wheel.wear >= 0.75);
-  const wornTires = wheelTemps.filter((wheel) => wheel.wear !== null && wheel.wear >= 0.5 && wheel.wear < 0.75);
+  const onRumbleStrip = Object.values(telemetry.wheelOnRumbleStrip || {}).some(Boolean);
   const overheatedTires = wheelTemps.filter((wheel) => wheel.current !== null && wheel.current >= 105);
   const hotTires = wheelTemps.filter((wheel) => wheel.current !== null && wheel.current >= 95 && wheel.current < 105);
-  const slidingTires = wheelTemps.filter((wheel) => wheel.slip !== null && wheel.slip >= 1);
-  const unstableTires = wheelTemps.filter((wheel) => wheel.slip !== null && wheel.slip >= 0.75 && wheel.slip < 1);
-  const compressedSuspension = suspensionTravel.filter((corner) => corner.current !== null && corner.current >= 0.98);
+  const slidingTires = wheelTemps.filter((wheel) => wheel.combinedSlip !== null && wheel.combinedSlip >= 1);
+  const unstableTires = wheelTemps.filter((wheel) => wheel.combinedSlip !== null && wheel.combinedSlip >= 0.75 && wheel.combinedSlip < 1);
+  const compressedSuspension = onRumbleStrip ? [] : suspensionTravel.filter((corner) => corner.current !== null && corner.current >= 0.98);
   const loadedSuspension = suspensionTravel.filter((corner) => corner.current !== null && corner.current >= 0.9 && corner.current < 0.98);
+  const rearWheelspin = wheelTemps.filter((wheel) => ['rl', 'rr'].includes(wheel.key) && wheel.slipRatio !== null && wheel.slipRatio > 1);
+  const frontSlipAngle = wheelTemps.filter((wheel) => ['fl', 'fr'].includes(wheel.key) && wheel.slipAngle !== null);
+  const rearSlipAngle = wheelTemps.filter((wheel) => ['rl', 'rr'].includes(wheel.key) && wheel.slipAngle !== null);
+  const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  const frontSlipAngleAverage = average(frontSlipAngle.map((wheel) => wheel.slipAngle));
+  const rearSlipAngleAverage = average(rearSlipAngle.map((wheel) => wheel.slipAngle));
+  const understeerDetected = Math.abs(gForce.x) >= 0.4 && frontSlipAngleAverage !== null && rearSlipAngleAverage !== null && frontSlipAngleAverage > rearSlipAngleAverage + 0.15;
+  const frontCompressionVelocity = Math.max(0, ...suspensionTravel.slice(0, 2).map((corner) => corner.velocity || 0));
+  const frontReboundVelocity = Math.min(0, ...suspensionTravel.slice(0, 2).map((corner) => corner.velocity || 0));
+  const pitchDegrees = (telemetry.orientation?.pitch || 0) * (180 / Math.PI);
+  const rollDegrees = (telemetry.orientation?.roll || 0) * (180 / Math.PI);
+  const excessiveRoll = Math.abs(gForce.x) >= 0.5 && Math.abs(rollDegrees) >= 8;
   const componentAlerts = [
     ...technicalAlerts,
-    severelyWornTires.length ? `Usure pneus critique : ${severelyWornTires.map((wheel) => `${wheel.name} ${Math.round(wheel.wear * 100)}%`).join(', ')}.` : null,
-    wornTires.length ? `Usure pneus à surveiller : ${wornTires.map((wheel) => `${wheel.name} ${Math.round(wheel.wear * 100)}%`).join(', ')}.` : null,
+    rearWheelspin.length && throttlePercent >= 55 ? `Patinage arrière : ${rearWheelspin.map((wheel) => wheel.name).join(', ')}. Réduisez le verrouillage à l'accélération du différentiel ou assouplissez les ressorts arrière.` : null,
+    understeerDetected ? `Sous-virage probable : l'angle de glissement avant (${frontSlipAngleAverage.toFixed(2)}) dépasse l'arrière (${rearSlipAngleAverage.toFixed(2)}). Augmentez l'appui avant ou assouplissez l'ARB avant.` : null,
+    frontCompressionVelocity > 3 && brakePercent >= 55 && !onRumbleStrip ? `Plongée au freinage : compression avant rapide (${frontCompressionVelocity.toFixed(1)}/s). Durcissez légèrement le bump avant.` : null,
+    frontReboundVelocity < -3 && !onRumbleStrip ? `Détente avant rapide (${Math.abs(frontReboundVelocity).toFixed(1)}/s) : ajustez le rebound pour aider la roue à rester en contact après une bosse.` : null,
+    excessiveRoll ? `Roulis élevé (${rollDegrees.toFixed(1)}°) sous ${Math.abs(gForce.x).toFixed(2)} G latéral : durcissez globalement les barres anti-roulis.` : null,
     overheatedTires.length ? `Surchauffe pneus : ${overheatedTires.map((wheel) => `${wheel.name} ${Math.round(wheel.current)}°C`).join(', ')}.` : null,
     hotTires.length ? `Pneus chauds : ${hotTires.map((wheel) => `${wheel.name} ${Math.round(wheel.current)}°C`).join(', ')}.` : null,
     slidingTires.length ? `Perte d'adhérence détectée : ${slidingTires.map((wheel) => wheel.name).join(', ')}.` : null,
@@ -434,6 +462,16 @@ function App() {
   ].filter(Boolean);
 
   // Résumé calculé depuis la capture à 1 Hz ; les seuils de « changements marquants » sont des heuristiques UX.
+  const trackBounds = trackPoints.reduce((bounds, point) => ({ minX: Math.min(bounds.minX, point.x), maxX: Math.max(bounds.maxX, point.x), minZ: Math.min(bounds.minZ, point.z), maxZ: Math.max(bounds.maxZ, point.z) }), { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity });
+  const projectTrackPoint = (point) => {
+    const padding = 12;
+    return {
+      x: padding + ((point.x - trackBounds.minX) / Math.max(trackBounds.maxX - trackBounds.minX, 1)) * 256,
+      y: padding + ((point.z - trackBounds.minZ) / Math.max(trackBounds.maxZ - trackBounds.minZ, 1)) * 156
+    };
+  };
+  const trackPath = trackPoints.length > 1 ? trackPoints.map((point, index) => { const projected = projectTrackPoint(point); return `${index === 0 ? 'M' : 'L'} ${projected.x} ${projected.y}`; }).join(' ') : '';
+
   const captureSummary = captureData.length === 0
     ? { points: 0, maxRpm: 0, maxSpeed: 0, maxBrake: 0, maxSteer: 0, maxGx: 0, maxGy: 0, bigChanges: 0 }
     : {
@@ -600,9 +638,10 @@ function App() {
     const data = sessionData.current;
     if (data.length === 0) return;
 
-    const headers = 'Timestamp,Speed_Kmh,RPM,Gear,Susp_FL,Susp_FR,Temp_FL_C,Temp_FR_C\n';
+    const headers = 'Timestamp,Speed_Kmh,RPM,Gear,Position_X,Position_Y,Position_Z,Pitch_deg,Roll_deg,Susp_FL,Susp_FR,SuspVel_FL,SuspVel_FR,SlipRatio_RL,SlipRatio_RR,SlipAngle_FL,SlipAngle_FR,Temp_FL_C,Temp_FR_C\n';
     const rows = data.map((d) => {
-      return `${d.timestamp},${d.speed.toFixed(1)},${d.rpm.toFixed(0)},${d.gear},${d.suspension?.fl?.toFixed(3) || ''},${d.suspension?.fr?.toFixed(3) || ''},${d.tireTemp?.fl?.toFixed(1) || ''},${d.tireTemp?.fr?.toFixed(1) || ''}`;
+      const degrees = (value) => Number.isFinite(value) ? (value * 180 / Math.PI).toFixed(2) : '';
+      return `${d.timestamp},${d.speed.toFixed(1)},${d.rpm.toFixed(0)},${d.gear},${d.position?.x?.toFixed(2) || ''},${d.position?.y?.toFixed(2) || ''},${d.position?.z?.toFixed(2) || ''},${degrees(d.orientation?.pitch)},${degrees(d.orientation?.roll)},${d.suspension?.fl?.toFixed(3) || ''},${d.suspension?.fr?.toFixed(3) || ''},${d.suspensionVelocity?.fl?.toFixed(3) || ''},${d.suspensionVelocity?.fr?.toFixed(3) || ''},${d.tireSlipRatio?.rl?.toFixed(3) || ''},${d.tireSlipRatio?.rr?.toFixed(3) || ''},${d.tireSlipAngle?.fl?.toFixed(3) || ''},${d.tireSlipAngle?.fr?.toFixed(3) || ''},${d.tireTemp?.fl?.toFixed(1) || ''},${d.tireTemp?.fr?.toFixed(1) || ''}`;
     }).join('\n');
 
     const csvContent = `data:text/csv;charset=utf-8,${headers}${rows}`;
@@ -942,6 +981,26 @@ function App() {
               <strong>{Math.round(telemetry.powerHp)} CH</strong>
             </div>
           </div>
+          <div className="chassis-summary">
+            <span>Pitch {pitchDegrees.toFixed(1)}°</span>
+            <span>Roll {rollDegrees.toFixed(1)}°</span>
+            <span>{onRumbleStrip ? 'Vibreur détecté : alertes de talonnage filtrées' : 'Hors vibreur'}</span>
+          </div>
+          <div className="track-map-panel">
+            <div className="expert-panel-header">
+              <h3>Carte du trajet</h3>
+              <span>{trackPoints.length ? `${trackPoints.length} positions` : 'En attente'}</span>
+            </div>
+            {trackPoints.length > 1 ? (
+              <svg className="track-map" viewBox="0 0 280 180" role="img" aria-label="Trajet et incidents détectés">
+                <path d={trackPath} className="track-path" />
+                {trackPoints.filter((point) => point.alert).map((point, index) => {
+                  const projected = projectTrackPoint(point);
+                  return <circle key={`${point.x}-${point.z}-${index}`} cx={projected.x} cy={projected.y} r="3.5" className={`track-alert ${point.alert}`} />;
+                })}
+              </svg>
+            ) : <p className="track-map-empty">Roulez pour tracer le parcours. Les points rouges signalent un talonnage hors vibreur ou une surchauffe.</p>}
+          </div>
         </section>
 
         <section className="card">
@@ -1075,7 +1134,7 @@ function App() {
                   <div key={wheel.name} className="tire-heatmap-cell" style={{ '--tire-temperature': temperatureColor(wheel.current) }}>
                     <span>{wheel.name}</span>
                     <strong>{wheel.current === null ? '—' : `${Math.round(wheel.current)}°C`}</strong>
-                    <small>{wheel.wear === null ? 'Usure : non disponible' : `Usure : ${Math.round(wheel.wear * 100)}%`}</small>
+                    <small>{wheel.slipRatio === null ? 'Glissement : en attente' : `Ratio ${wheel.slipRatio.toFixed(2)} · angle ${wheel.slipAngle?.toFixed(2) ?? '—'}`}</small>
                   </div>
                 ))}
               </div>
@@ -1092,7 +1151,7 @@ function App() {
                   <div key={corner.name} className="expert-row">
                     <span>{corner.name}</span>
                     <strong>{corner.current === null ? '—' : `${Math.round(corner.current * 100)}%`}</strong>
-                    <small>{corner.current === null ? 'en attente' : `${corner.current.toFixed(3)} normalisé`}</small>
+                    <small>{corner.velocity === null ? 'vitesse : en attente' : `vitesse ${corner.velocity >= 0 ? '+' : ''}${corner.velocity.toFixed(2)}/s`}</small>
                   </div>
                 ))}
               </div>

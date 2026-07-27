@@ -35,7 +35,7 @@ DisableProgramGroupPage=yes
 ; Remove the following line to run in administrative install mode (install for all users).
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
-OutputDir={autoprograms}
+OutputDir="%appdata%\Local\Programs\Agent Télémétrie Forza\"
 OutputBaseFilename=Setup_Forza_Telemetry
 SolidCompression=yes
 WizardStyle=modern dark windows11
@@ -47,7 +47,7 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "{autoprograms}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "relay-server\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]

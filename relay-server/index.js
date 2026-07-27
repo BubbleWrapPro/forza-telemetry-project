@@ -109,6 +109,9 @@ async function start() {
   let lastSentTelemetry = null;
   let sendInProgress = false;
   let lastLapTime = 0;
+  // Le protocole FH6 ne fournit pas cette vitesse directement. Elle est dérivée
+  // de deux débattements normalisés successifs (unité : débattement normalisé/s).
+  let previousSuspension = null;
   const udpSocket = dgram.createSocket('udp4');
 
   // Aucun envoi n'est tenté tant que l'abonnement privé n'est pas confirmé.
@@ -145,26 +148,29 @@ async function start() {
   // les données dashboard à partir de l'octet 0, les autres formats à l'octet 12.
   udpSocket.on('message', async (msg) => {
     if (msg.length < 324 || msg.readInt32LE(0) !== 1) return;
-    const isMotorsportDash = msg.length >= 331;
-    const dashboardOffset = isMotorsportDash ? 0 : 12;
+    // FH6 utilise toujours un paquet fixe de 324 octets ; ne pas appliquer les
+    // décalages du format « Dash » de Forza Motorsport.
     const engineMaxRpm = msg.readFloatLE(8);
     const engineIdleRpm = msg.readFloatLE(12);
     const currentEngineRpm = msg.readFloatLE(16);
-    const speed = msg.readFloatLE(244 + dashboardOffset) * 3.6;
-    const powerHp = msg.readFloatLE(248 + dashboardOffset) / 745.7;
-    const torque = msg.readFloatLE(252 + dashboardOffset);
-    const gear = msg.readUInt8(307 + dashboardOffset);
-    const accel = msg.readUInt8(303 + dashboardOffset);
-    const brake = msg.readUInt8(304 + dashboardOffset);
-    const steer = msg.readInt8(308 + dashboardOffset);
+    const timestampMs = msg.readUInt32LE(4);
+    const speed = msg.readFloatLE(244) * 3.6;
+    const powerHp = msg.readFloatLE(248) / 745.7;
+    const torque = msg.readFloatLE(252);
+    const gear = msg.readUInt8(307);
+    const accel = msg.readUInt8(303);
+    const brake = msg.readUInt8(304);
+    const steer = msg.readInt8(308);
     const gForceLat = - (msg.readFloatLE(20) / 9.80665);
     const gForceLon = - (msg.readFloatLE(28) / 9.80665);
-    const lastLap = msg.readFloatLE(288 + dashboardOffset);
+    const lastLap = msg.readFloatLE(288);
     const fahrenheitToCelsius = (value) => (value - 32) * (5 / 9);
-    const tireWear = isMotorsportDash ? {
-      fl: msg.readFloatLE(314), fr: msg.readFloatLE(318),
-      rl: msg.readFloatLE(322), rr: msg.readFloatLE(326)
-    } : null;
+    const suspension = { fl: msg.readFloatLE(68), fr: msg.readFloatLE(72), rl: msg.readFloatLE(76), rr: msg.readFloatLE(80) };
+    const deltaSeconds = previousSuspension ? (timestampMs - previousSuspension.timestampMs) / 1000 : 0;
+    const suspensionVelocity = deltaSeconds > 0 && deltaSeconds < 1
+      ? Object.fromEntries(Object.entries(suspension).map(([wheel, travel]) => [wheel, (travel - previousSuspension.values[wheel]) / deltaSeconds]))
+      : { fl: 0, fr: 0, rl: 0, rr: 0 };
+    previousSuspension = { timestampMs, values: suspension };
 
     // Un nouveau temps de tour est persistant ; la télémétrie courante reste, elle, éphémère.
     if (lastLap > 0 && lastLap !== lastLapTime) {
@@ -177,19 +183,20 @@ async function start() {
     latestTelemetry = {
       rpm: currentEngineRpm, maxRpm: engineMaxRpm, idleRpm: engineIdleRpm, speed,
       gear: gear === 0 ? 'R' : gear, powerHp, torque, inputs: { accel, brake, steer },
-      gForce: { x: gForceLat, y: gForceLon }, timestamp: Date.now(), user_id: userId,
-      suspension: { fl: msg.readFloatLE(68), fr: msg.readFloatLE(72), rl: msg.readFloatLE(76), rr: msg.readFloatLE(80) },
+      // timestampMs est celui du jeu ; timestamp est celui de réception, utile pour l'export côté navigateur.
+      gForce: { x: gForceLat, y: gForceLon }, timestamp: Date.now(), timestampMs, user_id: userId,
+      position: { x: msg.readFloatLE(232), y: msg.readFloatLE(236), z: msg.readFloatLE(240) },
+      orientation: { pitch: msg.readFloatLE(60), roll: msg.readFloatLE(64) },
+      suspension,
+      suspensionVelocity,
       tireTemp: {
-        fl: fahrenheitToCelsius(msg.readFloatLE(256 + dashboardOffset)),
-        fr: fahrenheitToCelsius(msg.readFloatLE(260 + dashboardOffset)),
-        rl: fahrenheitToCelsius(msg.readFloatLE(264 + dashboardOffset)),
-        rr: fahrenheitToCelsius(msg.readFloatLE(268 + dashboardOffset))
+        fl: fahrenheitToCelsius(msg.readFloatLE(256)), fr: fahrenheitToCelsius(msg.readFloatLE(260)),
+        rl: fahrenheitToCelsius(msg.readFloatLE(264)), rr: fahrenheitToCelsius(msg.readFloatLE(268))
       },
-      tireWear,
-      tireSlip: {
-        fl: msg.readFloatLE(180), fr: msg.readFloatLE(184),
-        rl: msg.readFloatLE(188), rr: msg.readFloatLE(192)
-      }
+      tireSlipRatio: { fl: msg.readFloatLE(84), fr: msg.readFloatLE(88), rl: msg.readFloatLE(92), rr: msg.readFloatLE(96) },
+      tireSlipAngle: { fl: msg.readFloatLE(164), fr: msg.readFloatLE(168), rl: msg.readFloatLE(172), rr: msg.readFloatLE(176) },
+      tireCombinedSlip: { fl: msg.readFloatLE(180), fr: msg.readFloatLE(184), rl: msg.readFloatLE(188), rr: msg.readFloatLE(192) },
+      wheelOnRumbleStrip: { fl: Boolean(msg.readInt32LE(116)), fr: Boolean(msg.readInt32LE(120)), rl: Boolean(msg.readInt32LE(124)), rr: Boolean(msg.readInt32LE(128)) }
     };
   });
 
