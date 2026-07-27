@@ -78,7 +78,16 @@ function App() {
     powerHp: 0,
     torque: 0,
     inputs: { accel: 0, brake: 0, steer: 0 },
-    gForce: { x: 0, y: 0 }
+    gForce: { x: 0, y: 0 },
+    position: { x: 0, y: 0, z: 0 },
+    orientation: { pitch: 0, roll: 0 },
+    suspension: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    suspensionVelocity: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    tireTemp: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    tireSlipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    tireSlipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    tireCombinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    wheelOnRumbleStrip: { fl: false, fr: false, rl: false, rr: false }
   });
 
   // Données de capture et paramètres d'analyse, indépendants de l'enregistrement CSV haute fréquence.
@@ -368,30 +377,6 @@ function App() {
   const speed = telemetry.speed || 0;
   const powerHp = telemetry.powerHp || 0;
 
-  // Indicateurs heuristiques destinés à l'interface, pas des diagnostics mécaniques mesurés.
-  const engineLoad = Math.min(100, Math.round((rpmPercent * 0.6) + ((powerHp / 800) * 40)));
-  const tireStress = Math.min(100, Math.round(((Math.abs(gForce.x) + Math.abs(gForce.y)) * 35) + (brakePercent * 0.3) + (throttlePercent * 0.2)));
-  const suspensionLoad = Math.min(100, Math.round(((Math.abs(gForce.x) + Math.abs(gForce.y)) * 45) + ((speed / 200) * 20) + ((Math.abs(steeringAngle) / 90) * 15)));
-  const thermalStress = Math.min(100, Math.round((rpmPercent * 0.55) + ((powerHp / 800) * 45)));
-
-  const getStatus = (value, warn, critical) => {
-    if (value >= critical) return { label: 'Critique', tone: 'critical' };
-    if (value >= warn) return { label: 'Alerte', tone: 'warning' };
-    return { label: 'OK', tone: 'ok' };
-  };
-
-  const engineStatus = getStatus(engineLoad, 60, 85);
-  const tireStatus = getStatus(tireStress, 60, 85);
-  const suspensionStatus = getStatus(suspensionLoad, 60, 85);
-  const thermalStatus = getStatus(thermalStress, 60, 85);
-
-  const technicalAlerts = [
-    engineStatus.label !== 'OK' ? `Moteur ${engineStatus.label.toLowerCase()} : ${engineLoad}% de sollicitation.` : null,
-    tireStatus.label !== 'OK' ? `Pneus ${tireStatus.label.toLowerCase()} : ${tireStress}% de stress.` : null,
-    suspensionStatus.label !== 'OK' ? `Suspension ${suspensionStatus.label.toLowerCase()} : ${suspensionLoad}% de charge.` : null,
-    thermalStatus.label !== 'OK' ? `Thermique ${thermalStatus.label.toLowerCase()} : ${thermalStress}% de charge.` : null
-  ].filter(Boolean);
-
   const temperatureColor = (temperature) => {
     if (!Number.isFinite(temperature)) return 'rgba(71, 85, 105, 0.72)';
     if (temperature < 65) return '#38bdf8';
@@ -399,6 +384,7 @@ function App() {
     if (temperature < 105) return '#facc15';
     return '#f87171';
   };
+
   // Normalise les données optionnelles du relais : null signifie « donnée non disponible », jamais zéro.
   const wheelTemps = [
     { key: 'fl', name: 'AV G', value: telemetry.tireTemp?.fl, slipRatioValue: telemetry.tireSlipRatio?.fl, slipAngleValue: telemetry.tireSlipAngle?.fl, combinedSlipValue: telemetry.tireCombinedSlip?.fl },
@@ -419,6 +405,33 @@ function App() {
     { name: 'AR G', value: telemetry.suspension?.rl, velocity: telemetry.suspensionVelocity?.rl },
     { name: 'AR D', value: telemetry.suspension?.rr, velocity: telemetry.suspensionVelocity?.rr }
   ].map((corner) => ({ ...corner, current: Number.isFinite(corner.value) ? corner.value : null, velocity: Number.isFinite(corner.velocity) ? corner.velocity : null }));
+
+  // Indicateurs heuristiques destinés à l'interface, pas des diagnostics mécaniques mesurés.
+  const engineLoad = Math.min(100, Math.round((rpmPercent * 0.6) + ((powerHp / 800) * 40)));
+  const tireStress = Math.min(100, Math.round(((Math.abs(gForce.x) + Math.abs(gForce.y)) * 35) + (brakePercent * 0.3) + (throttlePercent * 0.2)));
+  const suspensionLoad = Math.min(100, Math.round(((Math.abs(gForce.x) + Math.abs(gForce.y)) * 45) + ((speed / 200) * 20) + ((Math.abs(steeringAngle) / 90) * 15)));
+
+  // Utilise la température des pneus pour diverger de la sollicitation moteur brute.
+  const avgTireTemp = wheelTemps.filter(w => w.current !== null).reduce((acc, w) => acc + w.current, 0) / (wheelTemps.filter(w => w.current !== null).length || 1);
+  const thermalStress = Math.min(100, Math.round((avgTireTemp / 110) * 70 + (rpmPercent * 0.3)));
+
+  const getStatus = (value, warn, critical) => {
+    if (value >= critical) return { label: 'Critique', tone: 'critical' };
+    if (value >= warn) return { label: 'Alerte', tone: 'warning' };
+    return { label: 'OK', tone: 'ok' };
+  };
+
+  const engineStatus = getStatus(engineLoad, 60, 85);
+  const tireStatus = getStatus(tireStress, 60, 85);
+  const suspensionStatus = getStatus(suspensionLoad, 60, 85);
+  const thermalStatus = getStatus(thermalStress, 60, 85);
+
+  const technicalAlerts = [
+    engineStatus.label !== 'OK' ? `Moteur ${engineStatus.label.toLowerCase()} : ${engineLoad}% de sollicitation.` : null,
+    tireStatus.label !== 'OK' ? `Pneus ${tireStatus.label.toLowerCase()} : ${tireStress}% de stress.` : null,
+    suspensionStatus.label !== 'OK' ? `Suspension ${suspensionStatus.label.toLowerCase()} : ${suspensionLoad}% de charge.` : null,
+    thermalStatus.label !== 'OK' ? `Thermique ${thermalStatus.label.toLowerCase()} : ${thermalStress}% de charge.` : null
+  ].filter(Boolean);
 
   const availableWheelTemps = wheelTemps.filter((wheel) => wheel.current !== null);
   const avgTemp = availableWheelTemps.length
@@ -982,8 +995,8 @@ function App() {
             </div>
           </div>
           <div className="chassis-summary">
-            <span>Pitch {pitchDegrees.toFixed(1)}°</span>
-            <span>Roll {rollDegrees.toFixed(1)}°</span>
+            <span>Inclinaison AV/AR {pitchDegrees.toFixed(1)}°</span>
+            <span>Inclinaison G/D {rollDegrees.toFixed(1)}°</span>
             <span>{onRumbleStrip ? 'Vibreur détecté : alertes de talonnage filtrées' : 'Hors vibreur'}</span>
           </div>
           <div className="track-map-panel">
@@ -1023,7 +1036,7 @@ function App() {
               <strong>{Math.round(telemetry.maxRpm)}</strong>
             </div>
             <div className="metric-box">
-              <span className="metric-label">Ralentit</span>
+              <span className="metric-label">A l'arrêt</span>
               <strong>{Math.round(telemetry.idleRpm)} RPM</strong>
             </div>
           </div>
@@ -1031,7 +1044,7 @@ function App() {
 
         <section className="card card-inputs">
           <div className="card-header">
-            <h2>Inputs pilote</h2>
+            <h2>Poste de pilotage</h2>
             <span className="card-tag">Direction</span>
           </div>
 
@@ -1083,7 +1096,7 @@ function App() {
 
         <section className="card card-tech">
           <div className="card-header">
-            <h2>Diagnostic technique</h2>
+            <h2>Diagnostic technique (utilisation)</h2>
             <span className="card-tag">Estimation live</span>
           </div>
 

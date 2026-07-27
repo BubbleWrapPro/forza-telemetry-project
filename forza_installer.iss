@@ -35,7 +35,7 @@ DisableProgramGroupPage=yes
 ; Remove the following line to run in administrative install mode (install for all users).
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
-OutputDir="%appdata%\Local\Programs\Agent Télémétrie Forza\"
+OutputDir={#GetEnv('USERPROFILE')}\Downloads
 OutputBaseFilename=Setup_Forza_Telemetry
 SolidCompression=yes
 WizardStyle=modern dark windows11

@@ -93,10 +93,10 @@ Voici les étapes de configuration à réaliser lors de votre première utilisat
 *L'agent est un programme léger et invisible qui fait le pont entre Forza et votre tableau de bord en ligne.*
 1. Exécutez le fichier téléchargé `Setup_Forza_Telemetry.exe`.
 2. Suivez les instructions de l'installeur en laissant les paramètres par défaut.
-3. À la fin de l'installation, un raccourci **Agent Télémétrie Forza** sera créé sur votre bureau.
+3. À la fin de l'installation, un fichier exécutable **Agent Télémétrie Forza** sera créé..
 
 ## Étape 3 : Liaison de l'Agent à votre compte
-1. Double-cliquez sur le raccourci présent sur votre bureau.
+1. Rechercher ce fichier par nom et exécutez-le..
 2. Une console de commande s'ouvre. Il vous sera demandé de lier le logiciel à votre espace en ligne.
 3. Saisissez **l'adresse email** et le **mot de passe** utilisés lors de votre inscription (Étape 1).
 4. L'agent validera la connexion et affichera : `Authentification réussie. En écoute sur le port UDP 5607`.

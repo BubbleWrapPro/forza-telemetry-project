@@ -154,16 +154,16 @@ async function start() {
     const engineIdleRpm = msg.readFloatLE(12);
     const currentEngineRpm = msg.readFloatLE(16);
     const timestampMs = msg.readUInt32LE(4);
-    const speed = msg.readFloatLE(244) * 3.6;
-    const powerHp = msg.readFloatLE(248) / 745.7;
-    const torque = msg.readFloatLE(252);
-    const gear = msg.readUInt8(307);
-    const accel = msg.readUInt8(303);
-    const brake = msg.readUInt8(304);
-    const steer = msg.readInt8(308);
+    const speed = msg.readFloatLE(256) * 3.6;
+    const powerHp = msg.readFloatLE(260) / 745.7;
+    const torque = msg.readFloatLE(264);
+    const gear = msg.readUInt8(319);
+    const accel = msg.readUInt8(315);
+    const brake = msg.readUInt8(316);
+    const steer = msg.readInt8(320);
     const gForceLat = - (msg.readFloatLE(20) / 9.80665);
     const gForceLon = - (msg.readFloatLE(28) / 9.80665);
-    const lastLap = msg.readFloatLE(288);
+    const lastLap = msg.readFloatLE(300);
     const fahrenheitToCelsius = (value) => (value - 32) * (5 / 9);
     const suspension = { fl: msg.readFloatLE(68), fr: msg.readFloatLE(72), rl: msg.readFloatLE(76), rr: msg.readFloatLE(80) };
     const deltaSeconds = previousSuspension ? (timestampMs - previousSuspension.timestampMs) / 1000 : 0;
@@ -185,18 +185,18 @@ async function start() {
       gear: gear === 0 ? 'R' : gear, powerHp, torque, inputs: { accel, brake, steer },
       // timestampMs est celui du jeu ; timestamp est celui de réception, utile pour l'export côté navigateur.
       gForce: { x: gForceLat, y: gForceLon }, timestamp: Date.now(), timestampMs, user_id: userId,
-      position: { x: msg.readFloatLE(232), y: msg.readFloatLE(236), z: msg.readFloatLE(240) },
+      position: { x: msg.readFloatLE(244), y: msg.readFloatLE(248), z: msg.readFloatLE(252) },
       orientation: { pitch: msg.readFloatLE(60), roll: msg.readFloatLE(64) },
       suspension,
       suspensionVelocity,
       tireTemp: {
-        fl: fahrenheitToCelsius(msg.readFloatLE(256)), fr: fahrenheitToCelsius(msg.readFloatLE(260)),
-        rl: fahrenheitToCelsius(msg.readFloatLE(264)), rr: fahrenheitToCelsius(msg.readFloatLE(268))
+        fl: fahrenheitToCelsius(msg.readFloatLE(268)), fr: fahrenheitToCelsius(msg.readFloatLE(272)),
+        rl: fahrenheitToCelsius(msg.readFloatLE(276)), rr: fahrenheitToCelsius(msg.readFloatLE(280))
       },
       tireSlipRatio: { fl: msg.readFloatLE(84), fr: msg.readFloatLE(88), rl: msg.readFloatLE(92), rr: msg.readFloatLE(96) },
-      tireSlipAngle: { fl: msg.readFloatLE(164), fr: msg.readFloatLE(168), rl: msg.readFloatLE(172), rr: msg.readFloatLE(176) },
-      tireCombinedSlip: { fl: msg.readFloatLE(180), fr: msg.readFloatLE(184), rl: msg.readFloatLE(188), rr: msg.readFloatLE(192) },
-      wheelOnRumbleStrip: { fl: Boolean(msg.readInt32LE(116)), fr: Boolean(msg.readInt32LE(120)), rl: Boolean(msg.readInt32LE(124)), rr: Boolean(msg.readInt32LE(128)) }
+      tireSlipAngle: { fl: msg.readFloatLE(148), fr: msg.readFloatLE(152), rl: msg.readFloatLE(156), rr: msg.readFloatLE(160) },
+      tireCombinedSlip: { fl: msg.readFloatLE(164), fr: msg.readFloatLE(168), rl: msg.readFloatLE(172), rr: msg.readFloatLE(176) },
+      wheelOnRumbleStrip: { fl: msg.readInt32LE(116) !== 0, fr: msg.readInt32LE(120) !== 0, rl: msg.readInt32LE(124) !== 0, rr: msg.readInt32LE(128) !== 0 }
     };
   });
 
