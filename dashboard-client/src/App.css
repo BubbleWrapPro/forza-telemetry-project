@@ -10,9 +10,43 @@ body {
 }
 
 button,
-select {
+select,
+input {
   font: inherit;
 }
+
+.auth-shell {
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.auth-panel {
+  display: grid;
+  gap: 0.75rem;
+  width: min(100%, 420px);
+  padding: 2rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.95);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.35);
+}
+
+.auth-panel h1,
+.auth-panel p { margin: 0; }
+
+.auth-panel label { color: #cbd5e1; font-size: 0.9rem; }
+
+.auth-panel input {
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 10px;
+}
+
+.auth-message { color: #fda4af; }
 
 .primary-btn,
 .ghost-btn {

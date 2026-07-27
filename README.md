@@ -54,10 +54,25 @@ Exécutez le script SQL suivant dans le SQL Editor de votre projet Supabase pour
 CREATE TABLE laptimes (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
-  lap_time numeric NOT NULL
+  lap_time numeric NOT NULL,
+  user_id uuid NOT NULL REFERENCES auth.users(id)
 );
 
 ALTER TABLE laptimes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read their own lap times"
+  ON laptimes FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own lap times"
+  ON laptimes FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can receive their telemetry broadcasts"
+  ON realtime.messages FOR SELECT TO authenticated
+  USING (realtime.topic() = 'telemetry_' || auth.uid()::text);
+
+CREATE POLICY "Users can send their telemetry broadcasts"
+  ON realtime.messages FOR INSERT TO authenticated
+  WITH CHECK (realtime.topic() = 'telemetry_' || auth.uid()::text);
 
 ```
 
@@ -74,8 +89,8 @@ npm install
 Créez un fichier `.env` à la racine de `relay-server` avec vos identifiants Supabase :
 
 ```env
-SUPABASE_URL=[https://votre-projet-id.supabase.co](https://votre-projet-id.supabase.co)
-SUPABASE_SERVICE_ROLE_KEY=votre_cle_secrète_service_role
+SUPABASE_URL=https://votre-projet-id.supabase.co
+SUPABASE_ANON_KEY=votre_cle_anon_publique
 
 ```
 
@@ -92,6 +107,8 @@ Créez un fichier `.env` ou `.env.local` à la racine de `dashboard-client` avec
 
 ```env
 VITE_NGROK_URL=https://votre-url-ngrok.ngrok-free.app
+VITE_SUPABASE_URL=https://votre-projet-id.supabase.co
+VITE_SUPABASE_ANON_KEY=votre_cle_anon_publique
 ```
 
 Ne poussez pas ce fichier dans votre dépôt : il contient une URL personnelle ngrok.
