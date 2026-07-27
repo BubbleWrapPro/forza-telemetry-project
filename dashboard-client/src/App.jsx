@@ -1,8 +1,16 @@
+/**
+ * Tableau de bord de télémétrie.
+ *
+ * Responsabilités : authentifier l'utilisateur, recevoir son flux Realtime,
+ * afficher les mesures live et produire des analyses/captures locales. Le format
+ * de télémétrie est produit par relay-server/index.js.
+ */
 import React, { useEffect, useState, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import './App.css';
 import { analysisProfiles, analysisMetrics, metricLabels, metricUnits, createProfileSnapshot } from './analysisProfiles';
 
+// Les variables Vite sont publiques côté navigateur ; ne jamais placer ici une clé de service Supabase.
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -11,6 +19,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Valeurs initiales du profil local. Elles servent aussi de schéma de secours lors d'une migration de localStorage.
 const defaultCustomMetrics = {
   rpm: true,
   speed: true,
@@ -32,9 +41,11 @@ const defaultCustomProfile = {
   gForceY: { ideal: 1.1, min: 0.5, max: 2.1 }
 };
 
+// Incrémenter la version si la structure stockée localement devient incompatible.
 const customProfileStorageKey = 'forza-custom-profile-v1';
 const customMetricsStorageKey = 'forza-custom-metrics-v1';
 
+// Fusionne les données persistées avec les valeurs par défaut pour tolérer les profils créés avec une ancienne version.
 const buildCustomProfileState = (savedValue) => {
   const nextProfile = { ...defaultCustomProfile, ...(savedValue || {}) };
   analysisMetrics.forEach((metric) => {
@@ -49,6 +60,7 @@ const buildCustomProfileState = (savedValue) => {
 const buildCustomMetricsState = (savedValue) => ({ ...defaultCustomMetrics, ...(savedValue || {}) });
 
 function App() {
+  // État d'authentification et du formulaire de connexion.
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState('login');
@@ -56,6 +68,7 @@ function App() {
   const [password, setPassword] = useState('');
   const [authMessage, setAuthMessage] = useState('');
   const [authSubmitting, setAuthSubmitting] = useState(false);
+  // Dernier état rendu à l'écran. Les paquets bruts sont gardés dans telemetryRef pour éviter un rendu par paquet.
   const [telemetry, setTelemetry] = useState({
     rpm: 0,
     maxRpm: 8000,
@@ -68,6 +81,7 @@ function App() {
     gForce: { x: 0, y: 0 }
   });
 
+  // Données de capture et paramètres d'analyse, indépendants de l'enregistrement CSV haute fréquence.
   const [captureActive, setCaptureActive] = useState(false);
   const [captureData, setCaptureData] = useState([]);
   const [analysisType, setAnalysisType] = useState('f1');
@@ -100,6 +114,7 @@ function App() {
   });
   const [showProfileDetails, setShowProfileDetails] = useState(false);
   const availableMetrics = analysisMetrics;
+  // Refs mutables : elles évitent des fermetures obsolètes et des rendus coûteux dans les chemins temps réel.
   const canvasRef = useRef(null);
   const captureIntervalRef = useRef(null);
   const telemetryRef = useRef(telemetry);
@@ -110,6 +125,7 @@ function App() {
   const isRecordingRef = useRef(isRecording);
   const sessionData = useRef([]);
 
+  // Restaure la session au chargement puis suit les connexions/déconnexions sans fuite d'abonnement.
   useEffect(() => {
     let active = true;
 
@@ -132,6 +148,7 @@ function App() {
     };
   }, []);
 
+  // Soumet indifféremment la connexion ou l'inscription selon le mode affiché.
   const handleAuthSubmit = async (event) => {
     event.preventDefault();
     setAuthSubmitting(true);
@@ -155,6 +172,8 @@ function App() {
     setOfflineMode(false);
   };
 
+  // Chaque utilisateur s'abonne uniquement à son canal privé telemetry_<userId>.
+  // Le flux peut dépasser 60 Hz : le state React est limité à 10 Hz, alors que les refs restent à jour.
   useEffect(() => {
     if (!session?.user?.id) {
       setTelemetryReceived(false);
@@ -231,26 +250,31 @@ function App() {
     };
   }, [session?.user?.id]);
 
+  // Le canvas est impératif : le redessiner après un rendu couvre aussi le mode hors ligne.
   useEffect(() => {
     drawGMeter(telemetry.gForce);
   }, [telemetry.gForce]);
 
+  // Rend l'état de l'enregistrement lisible par le gestionnaire Realtime sans le réabonner.
   useEffect(() => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
 
+  // Persistance navigateur uniquement : un échec de localStorage ne doit pas bloquer le tableau de bord.
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(customMetricsStorageKey, JSON.stringify(customMetrics));
     }
   }, [customMetrics]);
 
+  // Même règle de persistance pour les seuils personnalisés.
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(customProfileStorageKey, JSON.stringify(customProfile));
     }
   }, [customProfile]);
 
+  // La capture d'analyse échantillonne volontairement à 1 Hz, afin de garder un rapport compact et lisible.
   useEffect(() => {
     if (!captureActive) {
       if (captureIntervalRef.current) {
@@ -287,6 +311,7 @@ function App() {
     };
   }, [captureActive]);
 
+  // Dessine le G-mètre en bornant les valeurs à ±2,5 G pour conserver une échelle stable.
   const drawGMeter = (gForce = { x: 0, y: 0 }) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -330,6 +355,7 @@ function App() {
   const speed = telemetry.speed || 0;
   const powerHp = telemetry.powerHp || 0;
 
+  // Indicateurs heuristiques destinés à l'interface, pas des diagnostics mécaniques mesurés.
   const engineLoad = Math.min(100, Math.round((rpmPercent * 0.6) + ((powerHp / 800) * 40)));
   const tireStress = Math.min(100, Math.round(((Math.abs(gForce.x) + Math.abs(gForce.y)) * 35) + (brakePercent * 0.3) + (throttlePercent * 0.2)));
   const suspensionLoad = Math.min(100, Math.round(((Math.abs(gForce.x) + Math.abs(gForce.y)) * 45) + ((speed / 200) * 20) + ((Math.abs(steeringAngle) / 90) * 15)));
@@ -360,6 +386,7 @@ function App() {
     if (temperature < 105) return '#facc15';
     return '#f87171';
   };
+  // Normalise les données optionnelles du relais : null signifie « donnée non disponible », jamais zéro.
   const wheelTemps = [
     { name: 'AV G', value: telemetry.tireTemp?.fl, wearValue: telemetry.tireWear?.fl, slipValue: telemetry.tireSlip?.fl },
     { name: 'AV D', value: telemetry.tireTemp?.fr, wearValue: telemetry.tireWear?.fr, slipValue: telemetry.tireSlip?.fr },
@@ -406,6 +433,7 @@ function App() {
     loadedSuspension.length ? `Suspension proche de la butée : ${loadedSuspension.map((corner) => corner.name).join(', ')}.` : null
   ].filter(Boolean);
 
+  // Résumé calculé depuis la capture à 1 Hz ; les seuils de « changements marquants » sont des heuristiques UX.
   const captureSummary = captureData.length === 0
     ? { points: 0, maxRpm: 0, maxSpeed: 0, maxBrake: 0, maxSteer: 0, maxGx: 0, maxGy: 0, bigChanges: 0 }
     : {
@@ -426,11 +454,13 @@ function App() {
 
   const courseProfiles = profiles;
 
+  // Réinitialise aussi les métriques activées pour préserver la cohérence du profil personnalisé.
   const resetCustomProfile = () => {
     setCustomMetrics(defaultCustomMetrics);
     setCustomProfile(defaultCustomProfile);
   };
 
+  /** Compare la moyenne et les pics de la capture avec les plages du profil choisi. */
   const analyzeCapture = () => {
     if (captureData.length < 3) {
       setAnalysisReport([{ title: 'Pas assez de données', detail: 'Capture au moins 3 points significatifs avant l’analyse.', severity: 'warning' }]);
@@ -527,6 +557,7 @@ function App() {
     setAnalysisReport(details);
   };
 
+  /** Analyse l'enregistrement brut utilisé pour l'export, séparément de la capture d'analyse. */
   const analyzeSession = () => {
     const data = sessionData.current;
     if (data.length === 0) return;
@@ -564,6 +595,7 @@ function App() {
     setAnalysisReport(report);
   };
 
+  /** Exporte exclusivement les points enregistrés par l'utilisateur dans un CSV local. */
   const exportToCSV = () => {
     const data = sessionData.current;
     if (data.length === 0) return;
@@ -583,6 +615,7 @@ function App() {
     document.body.removeChild(link);
   };
 
+  // L'enregistrement conserve tous les paquets reçus : surveiller l'usage mémoire sur une longue session.
   const toggleRecording = () => {
     if (isRecording) {
       setIsRecording(false);

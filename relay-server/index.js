@@ -1,6 +1,15 @@
+/**
+ * Relais de télémétrie Forza.
+ *
+ * Ce processus reçoit les paquets UDP envoyés localement par le jeu, extrait les
+ * champs utiles, puis publie le dernier état connu sur un canal Supabase Realtime
+ * privé. Le tableau de bord s'abonne à ce même canal.
+ *
+ * Flux : Forza (UDP:5607) -> ce relais -> Supabase Realtime -> App.jsx.
+ */
 const ws = require('ws');
 
-// prevent error on agent app launch
+// Affiche les erreurs inattendues avant que la fenêtre de l'agent compilé ne se ferme.
 process.on('uncaughtException', (err) => {
     console.error("❌ ERREUR FATALE :", err.message);
     console.log(err.stack);
@@ -17,7 +26,7 @@ process.on('uncaughtException', (err) => {
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-// Détection automatique : sommes-nous dans l'exécutable pkg ou en mode développement ?
+// En binaire pkg, la configuration doit vivre près de l'exécutable, pas dans son système de fichiers virtuel.
 const isCompiled = typeof process.pkg !== 'undefined';
 const baseDir = isCompiled ? path.dirname(process.execPath) : __dirname;
 // Chemin final absolu et sûr pour le fichier de configuration
@@ -33,6 +42,7 @@ const SUPABASE_URL="https://yphsagzixbcrxmeqptpf.supabase.co"
 const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwaHNhZ3ppeGJjcnhtZXFwdHBmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5NjQ3NjcsImV4cCI6MjEwMDU0MDc2N30.kQThZTtNGm9Ttr0xGm3yFKtgy6n9FJN6vWI6Zqzhur8"
 
 
+// Ce client ne conserve aucune session en mémoire : le jeton est stocké explicitement dans config.json.
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
   // pkg cible Node 18, qui ne fournit pas WebSocket nativement.
@@ -40,6 +50,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { transport: ws }
 });
 
+// Crée une interface readline éphémère afin de ne pas laisser de descripteur stdin ouvert.
 const ask = (question) => new Promise((resolve) => {
   const terminal = readline.createInterface({ input: process.stdin, output: process.stdout });
   terminal.question(question, (answer) => {
@@ -48,6 +59,11 @@ const ask = (question) => new Promise((resolve) => {
   });
 });
 
+/**
+ * Restaure la session locale si elle est valide ; sinon demande les identifiants
+ * Supabase et mémorise les jetons de renouvellement pour les prochains démarrages.
+ * @returns {Promise<string>} identifiant de l'utilisateur propriétaire du canal.
+ */
 async function authenticateRelay() {
   if (fs.existsSync(configPath)) {
     try {
@@ -81,6 +97,10 @@ async function authenticateRelay() {
   return data.user.id;
 }
 
+/**
+ * Initialise le canal Realtime et le serveur UDP, puis maintient le cycle de vie
+ * du relais jusqu'à la réception d'un signal d'arrêt.
+ */
 async function start() {
   const userId = await authenticateRelay();
   const telemetryChannel = supabase.channel(`telemetry_${userId}`, { config: { private: true } });
@@ -91,6 +111,7 @@ async function start() {
   let lastLapTime = 0;
   const udpSocket = dgram.createSocket('udp4');
 
+  // Aucun envoi n'est tenté tant que l'abonnement privé n'est pas confirmé.
   telemetryChannel.subscribe((status) => {
     realtimeReady = status === 'SUBSCRIBED';
     if (realtimeReady) console.log(`Canal Realtime telemetry_${userId} connecté.`);
@@ -120,6 +141,8 @@ async function start() {
     }
   }, 1000 / 60);
 
+  // Les décalages dépendent du format de paquet Forza : Motorsport Dash contient
+  // les données dashboard à partir de l'octet 0, les autres formats à l'octet 12.
   udpSocket.on('message', async (msg) => {
     if (msg.length < 324 || msg.readInt32LE(0) !== 1) return;
     const isMotorsportDash = msg.length >= 331;
@@ -143,12 +166,14 @@ async function start() {
       rl: msg.readFloatLE(322), rr: msg.readFloatLE(326)
     } : null;
 
+    // Un nouveau temps de tour est persistant ; la télémétrie courante reste, elle, éphémère.
     if (lastLap > 0 && lastLap !== lastLapTime) {
       lastLapTime = lastLap;
       const { error } = await supabase.from('laptimes').insert([{ lap_time: lastLap, user_id: userId }]);
       if (error) console.error(`Impossible d'enregistrer le tour : ${error.message}`);
     }
 
+    // Contrat de données consommé par dashboard-client/src/App.jsx.
     latestTelemetry = {
       rpm: currentEngineRpm, maxRpm: engineMaxRpm, idleRpm: engineIdleRpm, speed,
       gear: gear === 0 ? 'R' : gear, powerHp, torque, inputs: { accel, brake, steer },
@@ -168,6 +193,7 @@ async function start() {
     };
   });
 
+  // Libère le port UDP et le canal Realtime pour permettre un redémarrage propre.
   const shutdown = async () => {
     clearInterval(broadcastTimer);
     udpSocket.close();
