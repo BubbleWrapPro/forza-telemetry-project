@@ -157,8 +157,8 @@ async function start() {
     const accel = msg.readUInt8(303 + dashboardOffset);
     const brake = msg.readUInt8(304 + dashboardOffset);
     const steer = msg.readInt8(308 + dashboardOffset);
-    const gForceLat = msg.readFloatLE(20) / 9.80665;
-    const gForceLon = msg.readFloatLE(28) / 9.80665;
+    const gForceLat = - (msg.readFloatLE(20) / 9.80665);
+    const gForceLon = - (msg.readFloatLE(28) / 9.80665);
     const lastLap = msg.readFloatLE(288 + dashboardOffset);
     const fahrenheitToCelsius = (value) => (value - 32) * (5 / 9);
     const tireWear = isMotorsportDash ? {
