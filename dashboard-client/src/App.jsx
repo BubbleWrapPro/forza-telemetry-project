@@ -1,15 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { io } from 'socket.io-client';
+import { createClient } from '@supabase/supabase-js';
 import './App.css';
 import { analysisProfiles, analysisMetrics, metricLabels, metricUnits, createProfileSnapshot } from './analysisProfiles';
 
-const ngrokUrl = import.meta.env.VITE_NGROK_URL;
-const socket = io(ngrokUrl || undefined, {
-  extraHeaders: {
-    'ngrok-skip-browser-warning': 'true'
-  }
-});
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY doivent être définies.');
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 const defaultCustomMetrics = {
   rpm: true,
   speed: true,
@@ -48,6 +49,13 @@ const buildCustomProfileState = (savedValue) => {
 const buildCustomMetricsState = (savedValue) => ({ ...defaultCustomMetrics, ...(savedValue || {}) });
 
 function App() {
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authMode, setAuthMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [telemetry, setTelemetry] = useState({
     rpm: 0,
     maxRpm: 8000,
@@ -103,7 +111,59 @@ function App() {
   const sessionData = useRef([]);
 
   useEffect(() => {
+    let active = true;
+
+    const restoreSession = async () => {
+      const { data: { session: restoredSession } } = await supabase.auth.getSession();
+      if (active) {
+        setSession(restoredSession);
+        setAuthLoading(false);
+      }
+    };
+
+    restoreSession();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (active) setSession(nextSession);
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleAuthSubmit = async (event) => {
+    event.preventDefault();
+    setAuthSubmitting(true);
+    setAuthMessage('');
+
+    const credentials = { email, password };
+    const result = authMode === 'login'
+      ? await supabase.auth.signInWithPassword(credentials)
+      : await supabase.auth.signUp(credentials);
+
+    if (result.error) {
+      setAuthMessage(result.error.message);
+    } else if (authMode === 'register' && !result.data.session) {
+      setAuthMessage('Inscription créée. Vérifiez votre e-mail pour confirmer votre compte.');
+    }
+    setAuthSubmitting(false);
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setOfflineMode(false);
+  };
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setTelemetryReceived(false);
+      setConnectionStatus('pending');
+      return undefined;
+    }
+
     const handleTelemetry = (data) => {
+      if (data.user_id !== session?.user?.id) return;
       setTelemetryReceived(true);
       telemetryRef.current = data;
       latestGForceRef.current = data.gForce || { x: 0, y: 0 };
@@ -152,30 +212,24 @@ function App() {
 
     const handleConnectError = () => {
       setConnectionStatus('error');
-      setConnectionMessage('Impossible de se connecter au serveur WebSocket.');
+      setConnectionMessage('Impossible de se connecter au canal Supabase Realtime.');
     };
 
-    const handleError = () => {
-      setConnectionStatus('error');
-      setConnectionMessage('Erreur de communication WebSocket détectée.');
-    };
-
-    socket.on('telemetry', handleTelemetry);
-    socket.on('connect', handleConnect);
-    socket.on('disconnect', handleDisconnect);
-    socket.on('connect_error', handleConnectError);
-    socket.on('error', handleError);
+    const channel = supabase
+      .channel(`telemetry_${session.user.id}`, { config: { private: true } })
+      .on('broadcast', { event: 'telemetry_update' }, ({ payload }) => handleTelemetry(payload))
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') handleConnect();
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') handleConnectError();
+        else if (status === 'CLOSED') handleDisconnect();
+      });
 
     return () => {
-      socket.off('telemetry', handleTelemetry);
-      socket.off('connect', handleConnect);
-      socket.off('disconnect', handleDisconnect);
-      socket.off('connect_error', handleConnectError);
-      socket.off('error', handleError);
+      supabase.removeChannel(channel);
       if (renderTelemetryTimerRef.current) clearTimeout(renderTelemetryTimerRef.current);
       if (gMeterFrameRef.current) cancelAnimationFrame(gMeterFrameRef.current);
     };
-  }, []);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     drawGMeter(telemetry.gForce);
@@ -542,6 +596,31 @@ function App() {
     setIsRecording(true);
   };
 
+  if (authLoading) {
+    return <div className="dashboard-shell auth-shell"><p>Vérification de la session…</p></div>;
+  }
+
+  if (!session) {
+    return (
+      <div className="dashboard-shell auth-shell">
+        <form className="auth-panel" onSubmit={handleAuthSubmit}>
+          <p className="eyebrow">Forza telemetry</p>
+          <h1>{authMode === 'login' ? 'Connexion' : 'Créer un compte'}</h1>
+          <p>Connectez-vous pour accéder uniquement à vos données de télémétrie.</p>
+          <label htmlFor="auth-email">E-mail</label>
+          <input id="auth-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
+          <label htmlFor="auth-password">Mot de passe</label>
+          <input id="auth-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} minLength="6" required />
+          {authMessage && <p className="auth-message" role="alert">{authMessage}</p>}
+          <button className="primary-btn" type="submit" disabled={authSubmitting}>{authSubmitting ? 'Veuillez patienter…' : authMode === 'login' ? 'Se connecter' : 'S’inscrire'}</button>
+          <button className="ghost-btn" type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthMessage(''); }}>
+            {authMode === 'login' ? 'Créer un compte' : 'J’ai déjà un compte'}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   if ((connectionStatus !== 'connected' || !telemetryReceived) && !offlineMode) {
     return (
       <div className="dashboard-shell connection-shell">
@@ -569,6 +648,7 @@ function App() {
       <header className="dashboard-header">
         <div>
           <p className="eyebrow">Forza telemetry</p>
+          <button type="button" className="ghost-btn" onClick={handleSignOut}>Déconnexion</button>
           <h1>Dashboard télémétrique</h1>
         </div>
         <div className={`status-pill ${offlineMode ? 'offline-status' : ''}`}>{offlineMode ? 'Mode hors ligne' : 'Données live'}</div>

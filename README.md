@@ -1,160 +1,120 @@
 # Forza Telemetry Dashboard
 
-Un tableau de bord interactif en temps réel exploitant les données télémétriques de la franchise Forza (Horizon / Motorsport). Ce projet intercepte le flux réseau UDP généré par le jeu, le traite via un serveur relais local et diffuse les métriques vers une application web React hébergée à distance.
+Un tableau de bord interactif en temps réel exploitant les données télémétriques de la franchise Forza (Horizon / Motorsport). Ce projet intercepte le flux réseau UDP généré par le jeu, le traite via un serveur relais local et diffuse les métriques vers une application web React hébergée à distance. <br> 
+A noter : le projet a été optimisé pour Forza Horizon 6 et peut ne pas fonctionner correctement sur un autre opus.
 
 ## 📋 Table des matières
-- [Architecture et Workflow](#architecture-et-workflow)
-- [Fonctionnalités](#fonctionnalités)
-- [Prérequis](#prérequis)
-- [Installation et Configuration](#installation-et-configuration)
-  - [1. Base de données (Supabase)](#1-base-de-données-supabase)
-  - [2. Serveur Relais (Backend)](#2-serveur-relais-backend)
-  - [3. Application Client (Frontend)](#3-application-client-frontend)
-- [Configuration du Jeu](#configuration-du-jeu)
-- [Déploiement](#déploiement)
-- [Utilisation](#utilisation)
+- [Procédure de Mise à Jour et de Déploiement (Dev)](#-procédure-de-mise-à-jour-et-de-déploiement-dev)
+  - [Base de données](#1-mise-à-jour-de-la-base-de-données-supabase---superadmin-seulement)
+  - [Frontend](#2-déploiement-de-linterface-web-frontend-react---webmaster-et-superadmin-seulement)
+  - [Backend](#3-compilation-et-distribution-de-lagent-local-backend-nodejs---nimporte-quel-développeur-backend)
+  - [Versionning](#4-versioning)
+- [Guide d'installation utilisateur](#-guide-dinstallation-et-dutilisation)
+  - [Création de compte](#étape-1--création-de-votre-compte-web)
+  - [Installation de l'agent](#étape-2--installation-de-lagent-local)
+  - [Liaison au compte](#étape-3--liaison-de-lagent-à-votre-compte)
+  - [Configuration du jeu](#étape-4--configuration-dans-forza-horizon--motorsport)
+  - [Utilsiation](#étape-5--analyse-en-course-pit-stop)
 
-## 🏗 Architecture et Workflow
+# 🛠 Procédure de Mise à Jour et de Déploiement (Dev)
 
-Le projet est divisé en deux composants principaux communiquant via WebSockets.
+Ce document décrit le flux de travail strict à respecter lors du déploiement d'une mise à jour logicielle sur l'infrastructure. L'architecture étant hybride (SaaS web + Agent local), la procédure se divise en trois axes.
 
-1. **Forza (Client Jeu) :** Génère un flux de données UDP (jusqu'à 60 fps) contenant l'état physique du véhicule.
-2. **Relais Node.js (Local) :** Écoute le port UDP sur la machine Windows, désérialise le buffer binaire (Little-Endian) et extrait les données. Il enregistre les temps au tour en base de données et diffuse le reste du flux via WebSocket.
-3. **Tunnel ngrok :** Expose le serveur WebSocket local via une URL sécurisée (HTTPS) pour contourner les restrictions CORS et Mixed-Content des navigateurs.
-4. **Dashboard React (Distant) :** Interface web hébergée de manière statique. Elle se connecte au tunnel ngrok, consomme les événements WebSocket et met à jour l'interface utilisateur à 60 fps.
+## 1. Mise à jour de la Base de Données (Supabase) - Superadmin seulement
+*À ne réaliser que si la mise à jour implique une modification du schéma de données.*
+1. Connectez-vous au tableau de bord Supabase.
+2. Ouvrez le **SQL Editor**.
+3. Exécutez vos scripts de migration (ajout de colonnes, modification des politiques RLS).
+4. Testez les requêtes RLS pour vous assurer que l'isolation des données entre les utilisateurs (`user_id`) reste hermétique.
 
-## ✨ Fonctionnalités
-- Affichage de la vitesse et du régime moteur (RPM) en temps réel.
-- Indicateur visuel du rapport de boîte de vitesses engagé.
-- G-Meter (Heatmap) interactif généré sur un composant Canvas.
-- Enregistrement automatique des temps au tour persistés en base de données.
-- Interface optimisée en *Dark Mode*.
+## 2. Déploiement de l'Interface Web (Frontend React) - Webmaster et superadmin seulement
+*Mise à jour du tableau de bord interactif distant.*
+1. Dans Visual Studio Code, ouvrez un terminal pointant sur le dossier `dashboard-client`.
+2. Assurez-vous que l'URL locale de développement pointe bien vers l'environnement de production Supabase.
+3. Lancez le processus de compilation (Vite) :
+   ```bash
+   npm run build
+   ```
+4. Connectez-vous via FTP ou SSH à votre espace d'hébergement Alwaysdata.
+5. Accédez au répertoire racine du site de type "Fichiers statiques".
+6. Supprimez l'ancien contenu et transférez l'intégralité du nouveau dossier `dist/`.
+7. Purgez le cache du navigateur pour vérifier la mise en ligne.
 
-## 🛠 Prérequis
-- **OS :** Windows 11 (pour exécuter le jeu et le serveur relais simultanément).
-- **Environnement :** Node.js (LTS).
-- **Outils :** Visual Studio Code, Git, ngrok.
-- **Services Cloud :** 
-  - Un compte Supabase (pour la persistance des données).
-  - Un hébergement Alwaysdata (pour le déploiement des fichiers statiques).
+## 3. Compilation et Distribution de l'Agent Local (Backend Node.js) - n'importe quel développeur backend
 
-## 🚀 Installation et Configuration
+*Mise à jour du relais UDP/Realtime installé sur les machines Windows des clients.*
 
-Clonez le dépôt sur votre machine locale :
+1. Dans Visual Studio Code, ouvrez `relay-server/package.json` et incrémentez le numéro de version (ex: `"version": "1.1.0"`).
+2. Ouvrez un terminal pointant sur le dossier `relay-server` et compilez l'exécutable autonome pour Windows 11 / 64 bits :
 ```bash
-git clone <URL_DU_REPO>
-cd forza-telemetry-project
+npm run package:win
 ```
 
-### 1. Base de données (Supabase)
 
-Exécutez le script SQL suivant dans le SQL Editor de votre projet Supabase pour initialiser la table et verrouiller les accès via RLS :
+3. Ouvrez **Inno Setup Compiler** et chargez votre fichier de configuration de l'installeur : le script `forza_installer.iss`.
+4. Mettez à jour le numéro de version dans le script Inno Setup.
+5. Cliquez sur **Build > Compile** pour générer le nouveau fichier `Setup_Forza_Telemetry.exe`.
+6. Hébergez ce nouvel installeur sur via les *Releases* GitHub
 
-```sql
-CREATE TABLE laptimes (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
-  lap_time numeric NOT NULL
-);
+## 4. Versioning
 
-ALTER TABLE laptimes ENABLE ROW LEVEL SECURITY;
-
-```
-
-### 2. Serveur Relais (Backend)
-
-Ce service doit tourner en local sur la même boucle réseau que le jeu.
-
+1. Validez toutes les modifications dans Git :
 ```bash
-cd relay-server
-npm install
-
+git add .
+git commit -m "feat: description de la mise à jour"
+git push origin main
 ```
+<br>
 
-Créez un fichier `.env` à la racine de `relay-server` avec vos identifiants Supabase :
-
-```env
-SUPABASE_URL=[https://votre-projet-id.supabase.co](https://votre-projet-id.supabase.co)
-SUPABASE_SERVICE_ROLE_KEY=votre_cle_secrète_service_role
-
-```
-
-### 3. Application Client (Frontend)
-
-L'interface web développée avec Vite et React.
-
-```bash
-cd ../dashboard-client
-npm install
-```
-
-Créez un fichier `.env` ou `.env.local` à la racine de `dashboard-client` avec votre URL ngrok :
-
-```env
-VITE_NGROK_URL=https://votre-url-ngrok.ngrok-free.app
-```
-
-Ne poussez pas ce fichier dans votre dépôt : il contient une URL personnelle ngrok.
-
-Dans `vite.config.js`, assurez-vous que les chemins relatifs sont activés pour le build :
-
-```javascript
-export default defineConfig({
-  plugins: [react()],
-  base: './',
-})
-```
-
-## 🎮 Configuration du Jeu
-
-Dans les paramètres de Forza (HUD et Gameplay) :
-
-* **Sortie de données (Data Out) :** Activé
-* **Adresse IP :** `127.0.0.1`
-* **Port :** `5607`
-
-## 🌍 Déploiement
-
-1. **Génération de l'URL sécurisée :**
-Lancez un tunnel ngrok pour exposer votre port local 3000.
-```bash
-ngrok http 3000
-
-```
+## Fin de la procédure de développement
+<br>
 
 
-2. **Configuration du Frontend :**
-Copiez l'URL HTTPS fournie par ngrok dans `dashboard-client/.env` :
-```env
-VITE_NGROK_URL=https://votre-url-ngrok.ngrok-free.app
-```
+<br>
+<br>
 
-3. **Build :**
-```bash
-npm run build
-
-```
+---
 
 
-4. **Hébergement :**
-Transférez le contenu du dossier `dashboard-client/dist/` à la racine de votre site de type "Fichiers statiques" sur Alwaysdata via FTP.
-
-> Si ngrok n'est pas installé, téléchargez-le ici : https://ngrok.com/download
-> 
-> Créez un compte ngrok pour obtenir une URL stable et garder votre URL privée hors du code.
-
-## 🏁 Utilisation
-
-L'ordre de lancement est critique pour le bon établissement des connexions réseau.
-
-1. Démarrez le serveur relais en local :
-```bash
-cd relay-server
-node index.js
-
-```
 
 
-2. Démarrez le tunnel ngrok (si ce n'est pas déjà fait).
-3. Accédez à votre URL Alwaysdata (ex: `https://votre-domaine.alwaysdata.net`) depuis le navigateur de votre choix (PC, tablette, smartphone).
-4. Lancez une session de conduite dans Forza. Les données s'afficheront instantanément sur le dashboard.
+# 🏁 Guide d'Installation et d'Utilisation
+
+Bienvenue sur le Dashboard Télémétrique Forza. Ce service vous permet d'analyser les données de votre véhicule en temps réel, comme un véritable ingénieur de piste, grâce à un système hybride couplant un agent d'extraction local et une interface web.
+
+Voici les étapes de configuration à réaliser lors de votre première utilisation.
+
+## Étape 1 : Création de votre compte Web
+1. Rendez-vous sur notre plateforme d'analyse web : `theriaud.alwaysdata.net/forza-telemetry`
+2. Cliquez sur **S'inscrire** pour créer votre espace personnel et sécurisé (Email / Mot de passe).
+3. Une fois connecté, accédez à votre profil et récupérer le fichier d'installation présent dans les releases Github.
+
+## Étape 2 : Installation de l'Agent Local
+*L'agent est un programme léger et invisible qui fait le pont entre Forza et votre tableau de bord en ligne.*
+1. Exécutez le fichier téléchargé `Setup_Forza_Telemetry.exe`.
+2. Suivez les instructions de l'installeur en laissant les paramètres par défaut.
+3. À la fin de l'installation, un raccourci **Agent Télémétrie Forza** sera créé sur votre bureau.
+
+## Étape 3 : Liaison de l'Agent à votre compte
+1. Double-cliquez sur le raccourci présent sur votre bureau.
+2. Une console de commande s'ouvre. Il vous sera demandé de lier le logiciel à votre espace en ligne.
+3. Saisissez **l'adresse email** et le **mot de passe** utilisés lors de votre inscription (Étape 1).
+4. L'agent validera la connexion et affichera : `Authentification réussie. En écoute sur le port UDP 5607`.
+*(Note : Cette étape n'est requise qu'une seule fois. L'agent mémorisera votre profil de manière sécurisée pour vos prochaines sessions).*
+
+## Étape 4 : Configuration dans Forza Horizon / Motorsport
+1. Lancez votre jeu Forza.
+2. Mettez le jeu en pause et accédez aux **Paramètres > Interface (HUD et Gameplay)**.
+3. Faites défiler vers le bas jusqu'à la section **Télémétrie / Sortie de données (Data Out)**.
+4. Appliquez la configuration suivante :
+   * **Activer la sortie des données :** Oui
+   * **Adresse IP :** `127.0.0.1`
+   * **Port :** `5607`
+5. Sauvegardez et retournez sur la route.
+
+## Étape 5 : Analyse en Course (Pit Stop)
+1. Ouvrez le tableau de bord web depuis n'importe quel appareil (votre deuxième écran, un smartphone, ou une tablette).
+2. Connectez-vous à votre compte.
+3. Laissez la console de l'Agent Télémétrie Forza ouverte en arrière-plan sur votre PC de jeu.
+4. Prenez le volant. Vos données remonteront instantanément sur l'interface web.
+5. Utilisez le bouton d'enregistrement pour analyser vos suspensions, la température de vos pneus et l'étagement de votre boîte de vitesses afin de parfaire vos réglages !
