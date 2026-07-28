@@ -22,6 +22,10 @@ jobs:
       # Task 1: Build dashboard-client
       - name: Install and Build Dashboard
         working-directory: ./dashboard-client
+        env:
+          # Injecting Supabase configuration for Vite
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           npm install
           npm run build
