@@ -1,0 +1,76 @@
+name: Build, Deploy, and Package Installer
+
+on:
+  push:
+    branches:
+      - main # Triggers the workflow on pushes to the main branch
+  workflow_dispatch: # Allows manual execution from the GitHub Actions tab
+
+jobs:
+  build-deploy-package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Adjust if your project requires a different version
+
+      # Task 1: Build dashboard-client
+      - name: Install and Build Dashboard
+        working-directory: ./dashboard-client
+        run: |
+          npm install
+          npm run build
+
+      # Task 2: Upload dist/ to Alwaysdata via WinSCP
+      - name: Install WinSCP
+        run: choco install winscp -y
+
+      - name: Deploy Dashboard to Alwaysdata
+        shell: pwsh
+        env:
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          $localPath = "$env:GITHUB_WORKSPACE\dashboard-client\dist"
+          $remotePath = "/forza-telemetry/"
+          $ftpHost = "ftp-theriaud.alwaysdata.net"
+          
+          # Encode password to handle special characters securely
+          $ftpPassEncoded = [Uri]::EscapeDataString($env:FTP_PASSWORD)
+          
+          Write-Host "[*] Synchronizing FTP via WinSCP..." -ForegroundColor Yellow
+          
+          & WinSCP.com /command `
+            "open ftps://$($env:FTP_USER):$ftpPassEncoded@$ftpHost/ -explicit -certificate=*" `
+            "synchronize remote ""$localPath"" ""$remotePath""" `
+            "exit"
+            
+          if ($LastExitCode -ne 0) {
+              Write-Host "=== Le transfert a échoué (Code $LastExitCode) ===" -ForegroundColor Red
+              exit 1
+          }
+
+      # Task 3: Package relay-server executable
+      - name: Install and Package Relay Server
+        working-directory: ./relay-server
+        run: |
+          npm install
+          npm run package:win
+
+      # Task 4: Compile Inno Setup Installer
+      # Using /O"Output" overrides the output directory so it builds within the runner's workspace
+      - name: Compile Installer with Inno Setup
+        run: iscc /O"Output" forza_installer.iss
+
+      # Task 5: Upload the generated installer as a workflow artifact
+      - name: Store Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Setup_Forza_Telemetry
+          path: Output/*.exe
+          retention-days: 14
