@@ -36,7 +36,7 @@ jobs:
           FTP_USER: ${{ secrets.FTP_USER }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: |
-          $localPath = dashboard-client\dist"
+          $localPath = "dashboard-client\dist"
           $remotePath = "/forza-telemetry/"
           $ftpHost = "ftp-theriaud.alwaysdata.net"
           
