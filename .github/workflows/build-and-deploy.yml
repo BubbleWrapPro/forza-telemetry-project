@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # Adjust if your project requires a different version
+          node-version: '24' # Adjust if the new project version requires a different node version
 
       # Task 1: Build dashboard-client
       - name: Install and Build Dashboard
