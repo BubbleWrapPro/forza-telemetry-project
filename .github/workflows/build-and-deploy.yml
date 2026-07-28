@@ -6,6 +6,10 @@ on:
       - main # Triggers the workflow on pushes to the main branch
   workflow_dispatch: # Allows manual execution from the GitHub Actions tab
 
+# REQUIRED: Grant permission to update the release
+permissions:
+  contents: write
+
 jobs:
   build-deploy-package:
     runs-on: windows-latest
@@ -77,10 +81,14 @@ jobs:
       - name: Compile Installer with Inno Setup
         run: iscc /O"Output" forza_installer.iss
 
-      # Task 5: Upload the generated installer as a workflow artifact
-      - name: Store Installer Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Setup_Forza_Telemetry
-          path: Output/*.exe
-          retention-days: 14
+      # Task 5: Upload and overwrite the installer in the latest release
+      - name: Update Latest Release Asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Retrieve the tag name of the most recent release
+          $LATEST_TAG = gh release view --json tagName -jq .tagName
+          Write-Host "Updating asset for latest release: $LATEST_TAG" -ForegroundColor Cyan
+          
+          # Upload the installer and overwrite any existing file with the same name
+          gh release upload $LATEST_TAG Output/Setup_Forza_Telemetry.exe --clobber
