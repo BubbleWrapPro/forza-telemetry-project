@@ -1,0 +1,10 @@
+- `[x]` Update `relay-server/index.js` to extract all FH6 telemetry fields.
+- `[x]` Update `dashboard-client/src/App.jsx` state to support all new fields.
+- `[x]` Implement dynamic widget visibility system in `App.jsx`.
+- `[x]` Add new UI widgets for:
+    - `[x]` Race & Session (Laps, Position, Fuel, Distance)
+    - `[x]` Advanced Chassis (Velocity, Acceleration, Angular Velocity)
+    - `[x]` Wheel Details (Puddle depth, Rotation speed, Surface rumble)
+    - `[x]` Car Info (Class, PI, Cylinders)
+- `[x]` Add "Customize Dashboard" panel for user preferences.
+- `[ ]` Verify all data points are correctly displayed.

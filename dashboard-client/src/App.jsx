@@ -44,6 +44,19 @@ const defaultCustomProfile = {
 // Incrémenter la version si la structure stockée localement devient incompatible.
 const customProfileStorageKey = 'forza-custom-profile-v1';
 const customMetricsStorageKey = 'forza-custom-metrics-v1';
+const widgetVisibilityStorageKey = 'forza-widget-visibility-v1';
+
+const defaultWidgetVisibility = {
+  transmission: true,
+  engine: true,
+  inputs: true,
+  gforce: true,
+  diagnostics: true,
+  raceInfo: true,
+  chassis: true,
+  wheelExpert: true,
+  carInfo: true
+};
 
 // Fusionne les données persistées avec les valeurs par défaut pour tolérer les profils créés avec une ancienne version.
 const buildCustomProfileState = (savedValue) => {
@@ -70,25 +83,43 @@ function App() {
   const [authSubmitting, setAuthSubmitting] = useState(false);
   // Dernier état rendu à l'écran. Les paquets bruts sont gardés dans telemetryRef pour éviter un rendu par paquet.
   const [telemetry, setTelemetry] = useState({
-    rpm: 0,
-    maxRpm: 8000,
-    idleRpm: 1000,
-    speed: 0,
-    gear: 0,
-    powerHp: 0,
-    torque: 0,
-    inputs: { accel: 0, brake: 0, steer: 0 },
+    isRaceOn: 0,
+    rpm: 0, maxRpm: 8000, idleRpm: 1000, speed: 0,
+    gear: 0, powerHp: 0, torque: 0,
+    inputs: { accel: 0, brake: 0, clutch: 0, handbrake: 0, steer: 0 },
     gForce: { x: 0, y: 0 },
+    acceleration: { x: 0, y: 0, z: 0 },
+    velocity: { x: 0, y: 0, z: 0 },
+    angularVelocity: { x: 0, y: 0, z: 0 },
     position: { x: 0, y: 0, z: 0 },
-    orientation: { pitch: 0, roll: 0 },
+    orientation: { yaw: 0, pitch: 0, roll: 0 },
     suspension: { fl: 0, fr: 0, rl: 0, rr: 0 },
     suspensionVelocity: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    suspensionTravelMeters: { fl: 0, fr: 0, rl: 0, rr: 0 },
     tireTemp: { fl: 0, fr: 0, rl: 0, rr: 0 },
     tireSlipRatio: { fl: 0, fr: 0, rl: 0, rr: 0 },
     tireSlipAngle: { fl: 0, fr: 0, rl: 0, rr: 0 },
     tireCombinedSlip: { fl: 0, fr: 0, rl: 0, rr: 0 },
-    wheelOnRumbleStrip: { fl: false, fr: false, rl: false, rr: false }
+    wheelRotationSpeed: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    wheelOnRumbleStrip: { fl: false, fr: false, rl: false, rr: false },
+    wheelInPuddleDepth: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    surfaceRumble: { fl: 0, fr: 0, rl: 0, rr: 0 },
+    carOrdinal: 0, carClass: 0, carPerformanceIndex: 0, drivetrainType: 0, numCylinders: 0,
+    boost: 0, fuel: 0, distanceTraveled: 0, bestLap: 0, lastLap: 0, currentLap: 0, currentRaceTime: 0,
+    lapNumber: 0, racePosition: 0, normDrivingLine: 0, normAIBrake: 0
   });
+
+  const [visibleWidgets, setVisibleWidgets] = useState(() => {
+    if (typeof window === 'undefined') return defaultWidgetVisibility;
+    try {
+      const stored = window.localStorage.getItem(widgetVisibilityStorageKey);
+      return stored ? { ...defaultWidgetVisibility, ...JSON.parse(stored) } : defaultWidgetVisibility;
+    } catch {
+      return defaultWidgetVisibility;
+    }
+  });
+
+  const [showCustomizer, setShowCustomizer] = useState(false);
 
   // Données de capture et paramètres d'analyse, indépendants de l'enregistrement CSV haute fréquence.
   const [captureActive, setCaptureActive] = useState(false);
@@ -296,6 +327,12 @@ function App() {
     }
   }, [customProfile]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(widgetVisibilityStorageKey, JSON.stringify(visibleWidgets));
+    }
+  }, [visibleWidgets]);
+
   // La capture d'analyse échantillonne volontairement à 1 Hz, afin de garder un rapport compact et lisible.
   useEffect(() => {
     if (!captureActive) {
@@ -458,6 +495,17 @@ function App() {
   const frontReboundVelocity = Math.min(0, ...suspensionTravel.slice(0, 2).map((corner) => corner.velocity || 0));
   const pitchDegrees = (telemetry.orientation?.pitch || 0) * (180 / Math.PI);
   const rollDegrees = (telemetry.orientation?.roll || 0) * (180 / Math.PI);
+  const yawDegrees = (telemetry.orientation?.yaw || 0) * (180 / Math.PI);
+
+  const formatTime = (seconds) => {
+    if (!seconds || seconds <= 0) return '--:--.---';
+    const mins = Math.floor(seconds / 60);
+    const secs = (seconds % 60).toFixed(3);
+    return `${mins}:${secs.padStart(6, '0')}`;
+  };
+
+  const carClasses = ['D', 'C', 'B', 'A', 'S1', 'S2', 'X'];
+  const drivetrainTypes = ['FWD', 'RWD', 'AWD'];
   const excessiveRoll = Math.abs(gForce.x) >= 0.5 && Math.abs(rollDegrees) >= 8;
   const componentAlerts = [
     ...technicalAlerts,
@@ -733,11 +781,43 @@ function App() {
       <header className="dashboard-header">
         <div>
           <p className="eyebrow">Forza telemetry</p>
-          <button type="button" className="ghost-btn" onClick={handleSignOut}>Déconnexion</button>
+          <div className="header-actions">
+            <button type="button" className="ghost-btn" onClick={() => setShowCustomizer(!showCustomizer)}>Personnaliser</button>
+            <button type="button" className="ghost-btn" onClick={handleSignOut}>Déconnexion</button>
+          </div>
           <h1>Dashboard télémétrique</h1>
         </div>
         <div className={`status-pill ${offlineMode ? 'offline-status' : ''}`}>{offlineMode ? 'Mode hors ligne' : 'Données live'}</div>
       </header>
+
+      {showCustomizer && (
+        <div className="customizer-panel card">
+          <div className="card-header">
+            <h2>Personnalisation du tableau de bord</h2>
+            <button className="ghost-btn" onClick={() => setShowCustomizer(false)}>Fermer</button>
+          </div>
+          <div className="customizer-grid">
+            {Object.keys(defaultWidgetVisibility).map(key => (
+              <label key={key} className="metric-toggle">
+                <input
+                  type="checkbox"
+                  checked={visibleWidgets[key]}
+                  onChange={() => setVisibleWidgets(prev => ({ ...prev, [key]: !prev[key] }))}
+                />
+                <span>{key === 'transmission' ? 'Transmission' :
+                       key === 'engine' ? 'Moteur' :
+                       key === 'inputs' ? 'Pilotage' :
+                       key === 'gforce' ? 'G-Force' :
+                       key === 'diagnostics' ? 'Diagnostic' :
+                       key === 'raceInfo' ? 'Course' :
+                       key === 'chassis' ? 'Châssis' :
+                       key === 'wheelExpert' ? 'Expert Roues' :
+                       key === 'carInfo' ? 'Véhicule' : key}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       {offlineMode && (
         <div className="offline-banner" role="status">
@@ -963,215 +1043,343 @@ function App() {
       </section>
 
       <div className="dashboard-grid">
-        <section className="card card-hero">
-          <div className="card-header">
-            <h2>Transmission</h2>
-            <span className="card-tag">Live</span>
-          </div>
+        {visibleWidgets.transmission && (
+          <section className="card card-hero">
+            <div className="card-header">
+              <h2>Transmission</h2>
+              <span className="card-tag">Live</span>
+            </div>
 
-          <div className="hero-metrics">
-            <div className="hero-speed">
-              {Math.round(telemetry.speed)}
-              <span>km/h</span>
-            </div>
-            <div className="hero-gear">{telemetry.gear}</div>
-          </div>
-
-          <div className="rpm-track">
-            <div
-              className="rpm-fill"
-              style={{ width: `${Math.min(rpmPercent, 100)}%`, backgroundColor: rpmPercent > 90 ? '#ff3366' : '#00cc99' }}
-            />
-          </div>
-
-          <div className="hero-meta">
-            <div>
-              <span>RPM</span>
-              <strong>{Math.round(telemetry.rpm)}</strong>
-            </div>
-            <div>
-              <span>Puissance</span>
-              <strong>{Math.round(telemetry.powerHp)} CH</strong>
-            </div>
-          </div>
-          <div className="chassis-summary">
-            <span>Inclinaison AV/AR {pitchDegrees.toFixed(1)}°</span>
-            <span>Inclinaison G/D {rollDegrees.toFixed(1)}°</span>
-            <span>{onRumbleStrip ? 'Vibreur détecté : alertes de talonnage filtrées' : 'Hors vibreur'}</span>
-          </div>
-          <div className="track-map-panel">
-            <div className="expert-panel-header">
-              <h3>Carte du trajet</h3>
-              <span>{trackPoints.length ? `${trackPoints.length} positions` : 'En attente'}</span>
-            </div>
-            {trackPoints.length > 1 ? (
-              <svg className="track-map" viewBox="0 0 280 180" role="img" aria-label="Trajet et incidents détectés">
-                <path d={trackPath} className="track-path" />
-                {trackPoints.filter((point) => point.alert).map((point, index) => {
-                  const projected = projectTrackPoint(point);
-                  return <circle key={`${point.x}-${point.z}-${index}`} cx={projected.x} cy={projected.y} r="3.5" className={`track-alert ${point.alert}`} />;
-                })}
-              </svg>
-            ) : <p className="track-map-empty">Roulez pour tracer le parcours. Les points rouges signalent un talonnage hors vibreur ou une surchauffe.</p>}
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="card-header">
-            <h2>Moteur</h2>
-            <span className="card-tag">Puissance</span>
-          </div>
-
-          <div className="metric-grid">
-            <div className="metric-box">
-              <span className="metric-label">Puissance</span>
-              <strong>{Math.round(telemetry.powerHp)} CH</strong>
-            </div>
-            <div className="metric-box">
-              <span className="metric-label">Couple</span>
-              <strong>{Math.round(telemetry.torque)} Nm</strong>
-            </div>
-            <div className="metric-box">
-              <span className="metric-label">RPM max</span>
-              <strong>{Math.round(telemetry.maxRpm)}</strong>
-            </div>
-            <div className="metric-box">
-              <span className="metric-label">A l'arrêt</span>
-              <strong>{Math.round(telemetry.idleRpm)} RPM</strong>
-            </div>
-          </div>
-        </section>
-
-        <section className="card card-inputs">
-          <div className="card-header">
-            <h2>Poste de pilotage</h2>
-            <span className="card-tag">Direction</span>
-          </div>
-
-          <div className="wheel-wrap">
-            <div className="steering-wheel" style={{ transform: `rotate(${steeringAngle}deg)` }}>
-              <div className="wheel-marker" />
-            </div>
-          </div>
-
-          <div className="pedal-row">
-            <div className="pedal-box">
-              <div className="pedal-bar">
-                <div className="pedal-fill brake" style={{ height: `${brakePercent}%` }} />
+            <div className="hero-metrics">
+              <div className="hero-speed">
+                {Math.round(telemetry.speed)}
+                <span>km/h</span>
               </div>
-              <span>Frein</span>
+              <div className="hero-gear">{telemetry.gear}</div>
             </div>
-            <div className="pedal-box">
-              <div className="pedal-bar">
-                <div className="pedal-fill accel" style={{ height: `${throttlePercent}%` }} />
-              </div>
-              <span>Gaz</span>
+
+            <div className="rpm-track">
+              <div
+                className="rpm-fill"
+                style={{ width: `${Math.min(rpmPercent, 100)}%`, backgroundColor: rpmPercent > 90 ? '#ff3366' : '#00cc99' }}
+              />
             </div>
-          </div>
 
-          <p className="input-summary">Volant {steeringAngle}° • Gaz {throttlePercent}% • Frein {brakePercent}%</p>
-        </section>
-
-        <section className="card">
-          <div className="card-header">
-            <h2>G-Force</h2>
-            <span className="card-tag">Dynamiques</span>
-          </div>
-
-          <div className="g-meter-wrap">
-            <canvas ref={canvasRef} width={220} height={220} className="g-meter-canvas" />
-            <p className="g-meter-legend">← charge latérale gauche · droite →<br />↑ / ↓ charge longitudinale · ±2,5 G</p>
-            <div className="g-metric-list">
-              <div className="g-metric-item">
-                <span>Latéral</span>
-                <strong>{gForce.x.toFixed(2)}</strong>
+            <div className="hero-meta">
+              <div>
+                <span>RPM</span>
+                <strong>{Math.round(telemetry.rpm)}</strong>
               </div>
-              <div className="g-metric-item">
-                <span>Longitudinal</span>
-                <strong>{gForce.y.toFixed(2)}</strong>
+              <div>
+                <span>Puissance</span>
+                <strong>{Math.round(telemetry.powerHp)} CH</strong>
               </div>
             </div>
-          </div>
-        </section>
-
-        <section className="card card-tech">
-          <div className="card-header">
-            <h2>Diagnostic technique (utilisation)</h2>
-            <span className="card-tag">Estimation live</span>
-          </div>
-
-          <div className="tech-diagnostic-grid">
-            <div className={`diagnostic-card ${engineStatus.tone}`}>
-              <span className="diagnostic-title">Moteur</span>
-              <strong className="diagnostic-value">{engineLoad}%</strong>
-              <p>{engineStatus.label}</p>
+            <div className="chassis-summary">
+              <span>Tangage {pitchDegrees.toFixed(1)}°</span>
+              <span>Roulis {rollDegrees.toFixed(1)}°</span>
+              <span>Lacet {yawDegrees.toFixed(1)}°</span>
             </div>
-            <div className={`diagnostic-card ${tireStatus.tone}`}>
-              <span className="diagnostic-title">Pneus</span>
-              <strong className="diagnostic-value">{tireStress}%</strong>
-              <p>{tireStatus.label}</p>
-            </div>
-            <div className={`diagnostic-card ${suspensionStatus.tone}`}>
-              <span className="diagnostic-title">Suspension</span>
-              <strong className="diagnostic-value">{suspensionLoad}%</strong>
-              <p>{suspensionStatus.label}</p>
-            </div>
-            <div className={`diagnostic-card ${thermalStatus.tone}`}>
-              <span className="diagnostic-title">Thermique</span>
-              <strong className="diagnostic-value">{thermalStress}%</strong>
-              <p>{thermalStatus.label}</p>
-            </div>
-          </div>
-
-          <div className="pit-wall-alerts">
-            <h3>Alertes pit wall</h3>
-            {componentAlerts.length > 0 ? (
-              <ul>
-                {componentAlerts.map((alert) => (
-                  <li key={alert}>{alert}</li>
-                ))}
-              </ul>
-            ) : (
-              <p>Aucune alerte technique en cours.</p>
-            )}
-          </div>
-
-          <div className="expert-panels">
-            <div className="expert-panel">
+            <div className="track-map-panel">
               <div className="expert-panel-header">
-                <h3>Températures pneus</h3>
-                <span>{avgTemp === null ? 'En attente' : `${avgTemp}°C moyen`}</span>
+                <h3>Carte du trajet</h3>
+                <span>{trackPoints.length ? `${trackPoints.length} positions` : 'En attente'}</span>
               </div>
-              <div className="tire-heatmap" aria-label="Heatmap des températures des pneus">
-                {wheelTemps.map((wheel) => (
-                  <div key={wheel.name} className="tire-heatmap-cell" style={{ '--tire-temperature': temperatureColor(wheel.current) }}>
-                    <span>{wheel.name}</span>
-                    <strong>{wheel.current === null ? '—' : `${Math.round(wheel.current)}°C`}</strong>
-                    <small>{wheel.slipRatio === null ? 'Glissement : en attente' : `Ratio ${wheel.slipRatio.toFixed(2)} · angle ${wheel.slipAngle?.toFixed(2) ?? '—'}`}</small>
-                  </div>
-                ))}
+              {trackPoints.length > 1 ? (
+                <svg className="track-map" viewBox="0 0 280 180" role="img" aria-label="Trajet et incidents détectés">
+                  <path d={trackPath} className="track-path" />
+                  {trackPoints.filter((point) => point.alert).map((point, index) => {
+                    const projected = projectTrackPoint(point);
+                    return <circle key={`${point.x}-${point.z}-${index}`} cx={projected.x} cy={projected.y} r="3.5" className={`track-alert ${point.alert}`} />;
+                  })}
+                </svg>
+              ) : <p className="track-map-empty">Roulez pour tracer le parcours. Les points rouges signalent un talonnage hors vibreur ou une surchauffe.</p>}
+            </div>
+          </section>
+        )}
+
+        {visibleWidgets.raceInfo && (
+          <section className="card">
+            <div className="card-header">
+              <h2>Course & Session</h2>
+              <span className="card-tag">Infos</span>
+            </div>
+            <div className="metric-grid">
+              <div className="metric-box">
+                <span className="metric-label">Position</span>
+                <strong>{telemetry.racePosition || '-'}</strong>
               </div>
-              <p className="heatmap-legend">Bleu : froid · vert : optimal · jaune : chaud · rouge : surchauffe</p>
+              <div className="metric-box">
+                <span className="metric-label">Tour</span>
+                <strong>{telemetry.lapNumber + 1}</strong>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">Carburant</span>
+                <strong>{Math.round(telemetry.fuel * 100)}%</strong>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">Distance</span>
+                <strong>{(telemetry.distanceTraveled / 1000).toFixed(2)} km</strong>
+              </div>
+              <div className="metric-box full-width">
+                <span className="metric-label">Meilleur tour</span>
+                <strong>{formatTime(telemetry.bestLap)}</strong>
+              </div>
+              <div className="metric-box full-width">
+                <span className="metric-label">Tour actuel</span>
+                <strong>{formatTime(telemetry.currentLap)}</strong>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {visibleWidgets.engine && (
+          <section className="card">
+            <div className="card-header">
+              <h2>Moteur</h2>
+              <span className="card-tag">Puissance</span>
             </div>
 
-            <div className="expert-panel">
-              <div className="expert-panel-header">
-                <h3>Débattement suspension</h3>
-                <span>{maxSuspensionTravel === null ? 'En attente' : `${maxSuspensionTravel}% max`}</span>
+            <div className="metric-grid">
+              <div className="metric-box">
+                <span className="metric-label">Puissance</span>
+                <strong>{Math.round(telemetry.powerHp)} CH</strong>
               </div>
-              <div className="expert-list">
-                {suspensionTravel.map((corner) => (
-                  <div key={corner.name} className="expert-row">
-                    <span>{corner.name}</span>
-                    <strong>{corner.current === null ? '—' : `${Math.round(corner.current * 100)}%`}</strong>
-                    <small>{corner.velocity === null ? 'vitesse : en attente' : `vitesse ${corner.velocity >= 0 ? '+' : ''}${corner.velocity.toFixed(2)}/s`}</small>
-                  </div>
-                ))}
+              <div className="metric-box">
+                <span className="metric-label">Couple</span>
+                <strong>{Math.round(telemetry.torque)} Nm</strong>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">Turbo / Boost</span>
+                <strong>{telemetry.boost.toFixed(2)} bar</strong>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">RPM max</span>
+                <strong>{Math.round(telemetry.maxRpm)}</strong>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
+        {visibleWidgets.carInfo && (
+          <section className="card">
+            <div className="card-header">
+              <h2>Véhicule</h2>
+              <span className="card-tag">Specs</span>
+            </div>
+            <div className="metric-grid">
+              <div className="metric-box">
+                <span className="metric-label">Classe</span>
+                <strong>{carClasses[telemetry.carClass] || '-'}</strong>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">PI</span>
+                <strong>{telemetry.carPerformanceIndex}</strong>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">Transmission</span>
+                <strong>{drivetrainTypes[telemetry.drivetrainType] || '-'}</strong>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">Cylindres</span>
+                <strong>{telemetry.numCylinders}</strong>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {visibleWidgets.inputs && (
+          <section className="card card-inputs">
+            <div className="card-header">
+              <h2>Poste de pilotage</h2>
+              <span className="card-tag">Direction</span>
+            </div>
+
+            <div className="wheel-wrap">
+              <div className="steering-wheel" style={{ transform: `rotate(${steeringAngle}deg)` }}>
+                <div className="wheel-marker" />
+              </div>
+            </div>
+
+            <div className="pedal-row">
+              <div className="pedal-box">
+                <div className="pedal-bar">
+                  <div className="pedal-fill brake" style={{ height: `${brakePercent}%` }} />
+                </div>
+                <span>Frein</span>
+              </div>
+              <div className="pedal-box">
+                <div className="pedal-bar">
+                  <div className="pedal-fill accel" style={{ height: `${throttlePercent}%` }} />
+                </div>
+                <span>Gaz</span>
+              </div>
+              <div className="pedal-box">
+                <div className="pedal-bar">
+                  <div className="pedal-fill clutch" style={{ height: `${Math.round((telemetry.inputs.clutch / 255) * 100)}%` }} />
+                </div>
+                <span>Embray.</span>
+              </div>
+            </div>
+
+            <p className="input-summary">Volant {steeringAngle}° • Frein à main {telemetry.inputs.handbrake > 0 ? 'ACTIF' : 'OFF'}</p>
+          </section>
+        )}
+
+        {visibleWidgets.gforce && (
+          <section className="card">
+            <div className="card-header">
+              <h2>G-Force</h2>
+              <span className="card-tag">Dynamiques</span>
+            </div>
+
+            <div className="g-meter-wrap">
+              <canvas ref={canvasRef} width={220} height={220} className="g-meter-canvas" />
+              <p className="g-meter-legend">← charge latérale gauche · droite →<br />↑ / ↓ charge longitudinale · ±2,5 G</p>
+              <div className="g-metric-list">
+                <div className="g-metric-item">
+                  <span>Latéral</span>
+                  <strong>{gForce.x.toFixed(2)}</strong>
+                </div>
+                <div className="g-metric-item">
+                  <span>Longitudinal</span>
+                  <strong>{gForce.y.toFixed(2)}</strong>
+                </div>
+                <div className="g-metric-item">
+                  <span>Vertical</span>
+                  <strong>{(telemetry.acceleration.y / 9.80665).toFixed(2)}</strong>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {visibleWidgets.chassis && (
+          <section className="card">
+            <div className="card-header">
+              <h2>Châssis Avancé</h2>
+              <span className="card-tag">Vitesse & Accel</span>
+            </div>
+            <div className="metric-grid">
+              <div className="metric-box">
+                <span className="metric-label">Vitesse X</span>
+                <strong>{telemetry.velocity.x.toFixed(1)} m/s</strong>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">Vitesse Y</span>
+                <strong>{telemetry.velocity.y.toFixed(1)} m/s</strong>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">Vitesse Z</span>
+                <strong>{telemetry.velocity.z.toFixed(1)} m/s</strong>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">Rotation Lacet</span>
+                <strong>{telemetry.angularVelocity.y.toFixed(2)} rad/s</strong>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {visibleWidgets.diagnostics && (
+          <section className="card card-tech">
+            <div className="card-header">
+              <h2>Diagnostic technique (utilisation)</h2>
+              <span className="card-tag">Estimation live</span>
+            </div>
+
+            <div className="tech-diagnostic-grid">
+              <div className={`diagnostic-card ${engineStatus.tone}`}>
+                <span className="diagnostic-title">Moteur</span>
+                <strong className="diagnostic-value">{engineLoad}%</strong>
+                <p>{engineStatus.label}</p>
+              </div>
+              <div className={`diagnostic-card ${tireStatus.tone}`}>
+                <span className="diagnostic-title">Pneus</span>
+                <strong className="diagnostic-value">{tireStress}%</strong>
+                <p>{tireStatus.label}</p>
+              </div>
+              <div className={`diagnostic-card ${suspensionStatus.tone}`}>
+                <span className="diagnostic-title">Suspension</span>
+                <strong className="diagnostic-value">{suspensionLoad}%</strong>
+                <p>{suspensionStatus.label}</p>
+              </div>
+              <div className={`diagnostic-card ${thermalStatus.tone}`}>
+                <span className="diagnostic-title">Thermique</span>
+                <strong className="diagnostic-value">{thermalStress}%</strong>
+                <p>{thermalStatus.label}</p>
+              </div>
+            </div>
+
+            <div className="pit-wall-alerts">
+              <h3>Alertes pit wall</h3>
+              {componentAlerts.length > 0 ? (
+                <ul>
+                  {componentAlerts.map((alert) => (
+                    <li key={alert}>{alert}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>Aucune alerte technique en cours.</p>
+              )}
+            </div>
+
+            <div className="expert-panels">
+              <div className="expert-panel">
+                <div className="expert-panel-header">
+                  <h3>Températures pneus</h3>
+                  <span>{avgTemp === null ? 'En attente' : `${avgTemp}°C moyen`}</span>
+                </div>
+                <div className="tire-heatmap" aria-label="Heatmap des températures des pneus">
+                  {wheelTemps.map((wheel) => (
+                    <div key={wheel.name} className="tire-heatmap-cell" style={{ '--tire-temperature': temperatureColor(wheel.current) }}>
+                      <span>{wheel.name}</span>
+                      <strong>{wheel.current === null ? '—' : `${Math.round(wheel.current)}°C`}</strong>
+                      <small>{wheel.slipRatio === null ? 'Glissement : en attente' : `Ratio ${wheel.slipRatio.toFixed(2)} · angle ${wheel.slipAngle?.toFixed(2) ?? '—'}`}</small>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="expert-panel">
+                <div className="expert-panel-header">
+                  <h3>Débattement suspension</h3>
+                  <span>{maxSuspensionTravel === null ? 'En attente' : `${maxSuspensionTravel}% max`}</span>
+                </div>
+                <div className="expert-list">
+                  {suspensionTravel.map((corner) => (
+                    <div key={corner.name} className="expert-row">
+                      <span>{corner.name}</span>
+                      <strong>{corner.current === null ? '—' : `${Math.round(corner.current * 100)}%`}</strong>
+                      <small>{corner.velocity === null ? 'vitesse : en attente' : `vitesse ${corner.velocity >= 0 ? '+' : ''}${corner.velocity.toFixed(2)}/s`}</small>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {visibleWidgets.wheelExpert && (
+          <section className="card">
+            <div className="card-header">
+              <h2>Expert Roues</h2>
+              <span className="card-tag">Détails</span>
+            </div>
+            <div className="expert-list">
+              {['fl', 'fr', 'rl', 'rr'].map(w => (
+                <div key={w} className="expert-row">
+                  <span>{w.toUpperCase()}</span>
+                  <div className="expert-mini-grid">
+                    <small>Eau: {Math.round(telemetry.wheelInPuddleDepth[w] * 100)}%</small>
+                    <small>Rumble: {Math.round(telemetry.surfaceRumble[w] * 100)}%</small>
+                    <small>Rot: {Math.round(telemetry.wheelRotationSpeed[w])} rad/s</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );
