@@ -4,9 +4,9 @@
 - `[x]` Add new UI widgets for session, chassis, wheels, and car info.
 - `[x]` Add "Customize Dashboard" panel.
 - `[x]` Landing Page Implementation.
-- `[x]` Visual Redesign (Hyper-Glow Racing):
-    - `[x]` Update `App.css` with new palette, fonts, and variables.
-    - `[x]` Refactor global and component styles in `App.css`.
-    - `[x]` Update `App.jsx` utility functions (colors, canvas) for new DA.
-    - `[x]` Add Google Fonts imports.
-    - `[x]` Verify WCAG2 compliance and responsive design.
+- `[x]` Visual Redesign (Hyper-Glow Racing).
+- `[x]` Fix `toFixed` Crash:
+    - `[x]` Implement `safeNum` helper in `App.jsx`.
+    - `[x]` Replace all direct `.toFixed()` calls with safe alternatives.
+    - `[x]` Robustify `handleTelemetry` data merging.
+    - `[x]` Verify with partial data simulation.

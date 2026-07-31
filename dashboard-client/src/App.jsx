@@ -232,8 +232,12 @@ function App() {
     const handleTelemetry = (data) => {
       if (data.user_id !== session?.user?.id) return;
       setTelemetryReceived(true);
-      telemetryRef.current = data;
-      latestGForceRef.current = data.gForce || { x: 0, y: 0 };
+
+      // Fusionne les données reçues avec l'état précédent pour éviter de perdre des champs
+      // si l'agent envoie un paquet partiel (ex: ancienne version de l'agent).
+      const mergedData = { ...telemetryRef.current, ...data };
+      telemetryRef.current = mergedData;
+      latestGForceRef.current = mergedData.gForce || { x: 0, y: 0 };
       setOfflineMode(false);
 
       // Le jeu peut envoyer plusieurs centaines de paquets par seconde. On garde
@@ -424,6 +428,12 @@ function App() {
   const speed = telemetry.speed || 0;
   const powerHp = telemetry.powerHp || 0;
 
+  /** Formate un nombre de manière sûre (évite les crashs toFixed sur undefined/NaN). */
+  const safeNum = (val, dec = 0) => {
+    const n = Number(val);
+    return isFinite(n) ? n.toFixed(dec) : (0).toFixed(dec);
+  };
+
   const temperatureColor = (temperature) => {
     if (!Number.isFinite(temperature)) return 'rgba(148, 163, 184, 0.1)';
     if (temperature < 65) return '#00E5FF'; // Secondary Cyan
@@ -510,7 +520,7 @@ function App() {
   const formatTime = (seconds) => {
     if (!seconds || seconds <= 0) return '--:--.---';
     const mins = Math.floor(seconds / 60);
-    const secs = (seconds % 60).toFixed(3);
+    const secs = safeNum(seconds % 60, 3);
     return `${mins}:${secs.padStart(6, '0')}`;
   };
 
@@ -520,10 +530,10 @@ function App() {
   const componentAlerts = [
     ...technicalAlerts,
     rearWheelspin.length && throttlePercent >= 55 ? `Patinage arrière : ${rearWheelspin.map((wheel) => wheel.name).join(', ')}. Réduisez le verrouillage à l'accélération du différentiel ou assouplissez les ressorts arrière.` : null,
-    understeerDetected ? `Sous-virage probable : l'angle de glissement avant (${frontSlipAngleAverage.toFixed(2)}) dépasse l'arrière (${rearSlipAngleAverage.toFixed(2)}). Augmentez l'appui avant ou assouplissez l'ARB avant.` : null,
-    frontCompressionVelocity > 3 && brakePercent >= 55 && !onRumbleStrip ? `Plongée au freinage : compression avant rapide (${frontCompressionVelocity.toFixed(1)}/s). Durcissez légèrement le bump avant.` : null,
-    frontReboundVelocity < -3 && !onRumbleStrip ? `Détente avant rapide (${Math.abs(frontReboundVelocity).toFixed(1)}/s) : ajustez le rebound pour aider la roue à rester en contact après une bosse.` : null,
-    excessiveRoll ? `Roulis élevé (${rollDegrees.toFixed(1)}°) sous ${Math.abs(gForce.x).toFixed(2)} G latéral : durcissez globalement les barres anti-roulis.` : null,
+    understeerDetected ? `Sous-virage probable : l'angle de glissement avant (${safeNum(frontSlipAngleAverage, 2)}) dépasse l'arrière (${safeNum(rearSlipAngleAverage, 2)}). Augmentez l'appui avant ou assouplissez l'ARB avant.` : null,
+    frontCompressionVelocity > 3 && brakePercent >= 55 && !onRumbleStrip ? `Plongée au freinage : compression avant rapide (${safeNum(frontCompressionVelocity, 1)}/s). Durcissez légèrement le bump avant.` : null,
+    frontReboundVelocity < -3 && !onRumbleStrip ? `Détente avant rapide (${safeNum(Math.abs(frontReboundVelocity), 1)}/s) : ajustez le rebound pour aider la roue à rester en contact après une bosse.` : null,
+    excessiveRoll ? `Roulis élevé (${safeNum(rollDegrees, 1)}°) sous ${safeNum(Math.abs(gForce.x), 2)} G latéral : durcissez globalement les barres anti-roulis.` : null,
     overheatedTires.length ? `Surchauffe pneus : ${overheatedTires.map((wheel) => `${wheel.name} ${Math.round(wheel.current)}°C`).join(', ')}.` : null,
     hotTires.length ? `Pneus chauds : ${hotTires.map((wheel) => `${wheel.name} ${Math.round(wheel.current)}°C`).join(', ')}.` : null,
     slidingTires.length ? `Perte d'adhérence détectée : ${slidingTires.map((wheel) => wheel.name).join(', ')}.` : null,
@@ -712,7 +722,7 @@ function App() {
     const headers = 'Timestamp,Speed_Kmh,RPM,Gear,Position_X,Position_Y,Position_Z,Pitch_deg,Roll_deg,Susp_FL,Susp_FR,SuspVel_FL,SuspVel_FR,SlipRatio_RL,SlipRatio_RR,SlipAngle_FL,SlipAngle_FR,Temp_FL_C,Temp_FR_C\n';
     const rows = data.map((d) => {
       const degrees = (value) => Number.isFinite(value) ? (value * 180 / Math.PI).toFixed(2) : '';
-      return `${d.timestamp},${d.speed.toFixed(1)},${d.rpm.toFixed(0)},${d.gear},${d.position?.x?.toFixed(2) || ''},${d.position?.y?.toFixed(2) || ''},${d.position?.z?.toFixed(2) || ''},${degrees(d.orientation?.pitch)},${degrees(d.orientation?.roll)},${d.suspension?.fl?.toFixed(3) || ''},${d.suspension?.fr?.toFixed(3) || ''},${d.suspensionVelocity?.fl?.toFixed(3) || ''},${d.suspensionVelocity?.fr?.toFixed(3) || ''},${d.tireSlipRatio?.rl?.toFixed(3) || ''},${d.tireSlipRatio?.rr?.toFixed(3) || ''},${d.tireSlipAngle?.fl?.toFixed(3) || ''},${d.tireSlipAngle?.fr?.toFixed(3) || ''},${d.tireTemp?.fl?.toFixed(1) || ''},${d.tireTemp?.fr?.toFixed(1) || ''}`;
+      return `${d.timestamp},${safeNum(d.speed, 1)},${safeNum(d.rpm, 0)},${d.gear},${safeNum(d.position?.x, 2)},${safeNum(d.position?.y, 2)},${safeNum(d.position?.z, 2)},${degrees(d.orientation?.pitch)},${degrees(d.orientation?.roll)},${safeNum(d.suspension?.fl, 3)},${safeNum(d.suspension?.fr, 3)},${safeNum(d.suspensionVelocity?.fl, 3)},${safeNum(d.suspensionVelocity?.fr, 3)},${safeNum(d.tireSlipRatio?.rl, 3)},${safeNum(d.tireSlipRatio?.rr, 3)},${safeNum(d.tireSlipAngle?.fl, 3)},${safeNum(d.tireSlipAngle?.fr, 3)},${safeNum(d.tireTemp?.fl, 1)},${safeNum(d.tireTemp?.fr, 1)}`;
     }).join('\n');
 
     const csvContent = `data:text/csv;charset=utf-8,${headers}${rows}`;
@@ -1160,9 +1170,9 @@ function App() {
               </div>
             </div>
             <div className="chassis-summary">
-              <span>Tangage {pitchDegrees.toFixed(1)}°</span>
-              <span>Roulis {rollDegrees.toFixed(1)}°</span>
-              <span>Lacet {yawDegrees.toFixed(1)}°</span>
+              <span>Tangage {safeNum(pitchDegrees, 1)}°</span>
+              <span>Roulis {safeNum(rollDegrees, 1)}°</span>
+              <span>Lacet {safeNum(yawDegrees, 1)}°</span>
             </div>
             <div className="track-map-panel">
               <div className="expert-panel-header">
@@ -1203,7 +1213,7 @@ function App() {
               </div>
               <div className="metric-box">
                 <span className="metric-label">Distance</span>
-                <strong>{(telemetry.distanceTraveled / 1000).toFixed(2)} km</strong>
+                <strong>{safeNum(telemetry.distanceTraveled / 1000, 2)} km</strong>
               </div>
               <div className="metric-box full-width">
                 <span className="metric-label">Meilleur tour</span>
@@ -1235,7 +1245,7 @@ function App() {
               </div>
               <div className="metric-box">
                 <span className="metric-label">Turbo / Boost</span>
-                <strong>{telemetry.boost.toFixed(2)} bar</strong>
+                <strong>{safeNum(telemetry.boost, 2)} bar</strong>
               </div>
               <div className="metric-box">
                 <span className="metric-label">RPM max</span>
@@ -1323,15 +1333,15 @@ function App() {
               <div className="g-metric-list">
                 <div className="g-metric-item">
                   <span>Latéral</span>
-                  <strong>{gForce.x.toFixed(2)}</strong>
+                  <strong>{safeNum(gForce.x, 2)}</strong>
                 </div>
                 <div className="g-metric-item">
                   <span>Longitudinal</span>
-                  <strong>{gForce.y.toFixed(2)}</strong>
+                  <strong>{safeNum(gForce.y, 2)}</strong>
                 </div>
                 <div className="g-metric-item">
                   <span>Vertical</span>
-                  <strong>{(telemetry.acceleration.y / 9.80665).toFixed(2)}</strong>
+                  <strong>{safeNum(telemetry.acceleration.y / 9.80665, 2)}</strong>
                 </div>
               </div>
             </div>
@@ -1347,19 +1357,19 @@ function App() {
             <div className="metric-grid">
               <div className="metric-box">
                 <span className="metric-label">Vitesse X</span>
-                <strong>{telemetry.velocity.x.toFixed(1)} m/s</strong>
+                <strong>{safeNum(telemetry.velocity.x, 1)} m/s</strong>
               </div>
               <div className="metric-box">
                 <span className="metric-label">Vitesse Y</span>
-                <strong>{telemetry.velocity.y.toFixed(1)} m/s</strong>
+                <strong>{safeNum(telemetry.velocity.y, 1)} m/s</strong>
               </div>
               <div className="metric-box">
                 <span className="metric-label">Vitesse Z</span>
-                <strong>{telemetry.velocity.z.toFixed(1)} m/s</strong>
+                <strong>{safeNum(telemetry.velocity.z, 1)} m/s</strong>
               </div>
               <div className="metric-box">
                 <span className="metric-label">Rotation Lacet</span>
-                <strong>{telemetry.angularVelocity.y.toFixed(2)} rad/s</strong>
+                <strong>{safeNum(telemetry.angularVelocity.y, 2)} rad/s</strong>
               </div>
             </div>
           </section>
@@ -1419,7 +1429,7 @@ function App() {
                     <div key={wheel.name} className="tire-heatmap-cell" style={{ '--tire-temperature': temperatureColor(wheel.current) }}>
                       <span>{wheel.name}</span>
                       <strong>{wheel.current === null ? '—' : `${Math.round(wheel.current)}°C`}</strong>
-                      <small>{wheel.slipRatio === null ? 'Glissement : en attente' : `Ratio ${wheel.slipRatio.toFixed(2)} · angle ${wheel.slipAngle?.toFixed(2) ?? '—'}`}</small>
+                      <small>{wheel.slipRatio === null ? 'Glissement : en attente' : `Ratio ${safeNum(wheel.slipRatio, 2)} · angle ${safeNum(wheel.slipAngle, 2)}`}</small>
                     </div>
                   ))}
                 </div>
@@ -1435,7 +1445,7 @@ function App() {
                     <div key={corner.name} className="expert-row">
                       <span>{corner.name}</span>
                       <strong>{corner.current === null ? '—' : `${Math.round(corner.current * 100)}%`}</strong>
-                      <small>{corner.velocity === null ? 'vitesse : en attente' : `vitesse ${corner.velocity >= 0 ? '+' : ''}${corner.velocity.toFixed(2)}/s`}</small>
+                      <small>{corner.velocity === null ? 'vitesse : en attente' : `vitesse ${corner.velocity >= 0 ? '+' : ''}${safeNum(corner.velocity, 2)}/s`}</small>
                     </div>
                   ))}
                 </div>
