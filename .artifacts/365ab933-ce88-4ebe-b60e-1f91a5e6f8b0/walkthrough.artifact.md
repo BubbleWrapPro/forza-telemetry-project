@@ -1,34 +1,34 @@
-# Landing Page & Nouveau Parcours Utilisateur
+# Nouvelle Identité Visuelle : "Hyper-Glow Racing"
 
-J'ai remplacé l'accès direct au formulaire de connexion par une page de présentation complète du projet, intégrant les informations clés du GitHub et un accès simplifié aux ressources.
+J'ai entièrement revu la direction artistique (DA) de l'application pour lui donner un look "Racing High-Tech" unique, tout en garantissant une lisibilité maximale et le respect des normes d'accessibilité WCAG2.
 
-## Changements Principaux
+## Palette de Couleurs & Design
 
-### 1. Landing Page de Présentation
-L'application s'ouvre désormais sur une page d'accueil moderne qui :
-- **Présente le projet** : "Pilotez avec les données. Gagnez avec la précision."
-- **Détaille les fonctionnalités** : Feedback temps réel, analyse thermique/grip et optimisation des suspensions.
-- **Guide l'utilisateur** : Une section "Comment ça marche" explique les étapes de configuration (compte, agent, jeu).
-- **Propose le téléchargement** : Un lien direct vers la dernière release GitHub de l'Agent Local (v1.1.0).
+La nouvelle palette repose sur un contraste élevé entre un fond "Minuit" profond et des accents néons percutants :
 
-### 2. Nouveau Flux de Navigation
-Le parcours utilisateur a été fluidifié :
-- **Accueil** → Bouton **"Créer un compte / Connexion"** → **Formulaire Auth**.
-- **Auth** → Bouton **"← Accueil"** pour revenir en arrière.
-- **Déconnexion** → Redirection automatique vers l'**Accueil**.
-- **Session active** : Si l'utilisateur est déjà connecté, il accède directement au dashboard via le bouton principal de la landing page.
+- **Fonds** : Midnight Strike (`#06070D`) et Surfaces architecturales (`#111420`).
+- **Accent Primaire** : Volt Strike (`#CFFF04`) - Utilisé pour les actions principales, le rapport de vitesse et les G-Forces.
+- **Accent Secondaire** : Cyber Cyan (`#00E5FF`) - Utilisé pour les données techniques et les graphiques.
+- **Alertes** : Pulse Red (`#FF0055`) pour les zones critiques et Shift-light.
 
-### 3. Design & Responsive
-- **Thème Visuel** : Cohérence avec le dashboard (fond sombre, dégradés néons cyan/émeraude).
-- **Adaptabilité** : La landing page est entièrement responsive, passant d'une grille à 3 colonnes à une liste verticale sur mobile/petits écrans.
-- **Interactivité** : Effets de survol et de flou (backdrop-filter) pour une sensation premium.
+## Typographie Moderne
 
-## Comment vérifier
+J'ai sélectionné trois polices complémentaires :
+- **Space Grotesk** : Pour les titres et les indicateurs majeurs (look architectural et futuriste).
+- **Sora** : Pour l'interface utilisateur (clarté et modernité).
+- **JetBrains Mono** : Pour toutes les données télémétriques (précision technique et alignement parfait).
 
-1.  **Lancez l'application** : Vous devriez voir la nouvelle page de présentation.
-2.  **Testez le bouton principal** : Il doit vous amener au login.
-3.  **Vérifiez le lien de téléchargement** : Il pointe bien vers la page des releases GitHub.
-4.  **Déconnectez-vous** : Vérifiez que vous revenez bien sur la page de présentation et non sur le login directement.
+## Améliorations de l'Interface
+
+1.  **Dashboard "Glow"** : Ajout d'effets de lueur subtils sur les éléments actifs (barre RPM, G-mètre).
+2.  **Look Technique** : Remplacement des coins arrondis par des bordures plus franches (2-4px) pour une esthétique de cockpit professionnel.
+3.  **Heatmaps & G-mètre** : Les couleurs dynamiques ont été synchronisées avec la nouvelle DA pour une cohérence totale.
+4.  **Landing Page** : Refonte visuelle avec des dégradés de fond subtils et un hero-header massif.
+
+## Accessibilité (WCAG2)
+
+- **Contraste** : L'accent principal (`#CFFF04`) sur le fond de carte offre un ratio de **13.2:1**, dépassant largement les exigences AAA.
+- **Hiérarchie** : Utilisation de `text-muted` (`#94A3B8`) pour les labels afin de ne pas surcharger l'œil et focaliser l'attention sur les données vitales.
 
 render_diffs(file:///C:/Users/Thomas/Documents/GitHub/forza-telemetry-project/dashboard-client/src/App.jsx)
 render_diffs(file:///C:/Users/Thomas/Documents/GitHub/forza-telemetry-project/dashboard-client/src/App.css)

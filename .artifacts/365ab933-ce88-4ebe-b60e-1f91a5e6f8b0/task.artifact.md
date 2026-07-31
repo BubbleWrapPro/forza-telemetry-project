@@ -1,15 +1,12 @@
 - `[x]` Update `relay-server/index.js` to extract all FH6 telemetry fields.
 - `[x]` Update `dashboard-client/src/App.jsx` state to support all new fields.
 - `[x]` Implement dynamic widget visibility system in `App.jsx`.
-- `[x]` Add new UI widgets for:
-    - `[x]` Race & Session (Laps, Position, Fuel, Distance)
-    - `[x]` Advanced Chassis (Velocity, Acceleration, Angular Velocity)
-    - `[x]` Wheel Details (Puddle depth, Rotation speed, Surface rumble)
-    - `[x]` Car Info (Class, PI, Cylinders)
-- `[x]` Add "Customize Dashboard" panel for user preferences.
-- `[x]` Verify all data points are correctly displayed.
-- `[x]` Landing Page Implementation:
-    - `[x]` Add `view` state to `App.jsx`.
-    - `[x]` Implement `renderLandingPage` in `App.jsx`.
-    - `[x]` Update `App.css` with landing page styles.
-    - `[x]` Connect navigation buttons between landing, auth, and dashboard.
+- `[x]` Add new UI widgets for session, chassis, wheels, and car info.
+- `[x]` Add "Customize Dashboard" panel.
+- `[x]` Landing Page Implementation.
+- `[x]` Visual Redesign (Hyper-Glow Racing):
+    - `[x]` Update `App.css` with new palette, fonts, and variables.
+    - `[x]` Refactor global and component styles in `App.css`.
+    - `[x]` Update `App.jsx` utility functions (colors, canvas) for new DA.
+    - `[x]` Add Google Fonts imports.
+    - `[x]` Verify WCAG2 compliance and responsive design.

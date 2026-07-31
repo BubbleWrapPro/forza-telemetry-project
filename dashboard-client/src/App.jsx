@@ -391,7 +391,7 @@ function App() {
     const y = Math.max(-maxG, Math.min(maxG, Number(gForce.y) || 0));
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
     ctx.lineWidth = 1;
     [28, 56, 84].forEach((radius) => {
       ctx.beginPath();
@@ -404,13 +404,16 @@ function App() {
     ctx.lineTo(centerX + 88, centerY);
     ctx.moveTo(centerX, centerY - 88);
     ctx.lineTo(centerX, centerY + 88);
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(centerX + x * scale, centerY - y * scale, 7, 0, 2 * Math.PI);
-    ctx.fillStyle = '#ff3366';
+    ctx.arc(centerX + x * scale, centerY - y * scale, 8, 0, 2 * Math.PI);
+    ctx.fillStyle = '#CFFF04'; // Primary Volt
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = 'rgba(207, 255, 4, 0.5)';
     ctx.fill();
+    ctx.shadowBlur = 0;
   };
 
   const rpmPercent = Math.max(0, ((telemetry.rpm - telemetry.idleRpm) / (telemetry.maxRpm - telemetry.idleRpm)) * 100);
@@ -422,11 +425,11 @@ function App() {
   const powerHp = telemetry.powerHp || 0;
 
   const temperatureColor = (temperature) => {
-    if (!Number.isFinite(temperature)) return 'rgba(71, 85, 105, 0.72)';
-    if (temperature < 65) return '#38bdf8';
-    if (temperature < 85) return '#22c55e';
-    if (temperature < 105) return '#facc15';
-    return '#f87171';
+    if (!Number.isFinite(temperature)) return 'rgba(148, 163, 184, 0.1)';
+    if (temperature < 65) return '#00E5FF'; // Secondary Cyan
+    if (temperature < 85) return '#00FF94'; // OK Green
+    if (temperature < 105) return '#FFB800'; // Warning Gold
+    return '#FF0055'; // Alert Red
   };
 
   // Normalise les données optionnelles du relais : null signifie « donnée non disponible », jamais zéro.
@@ -840,7 +843,7 @@ function App() {
       <div className="dashboard-shell connection-shell">
         <div className="connection-panel">
           <span className={`connection-pill ${connectionStatus}`}>{connectionStatus === 'connected' ? 'Connecté' : connectionStatus === 'pending' ? 'En attente' : 'Déconnecté'}</span>
-          <h2>Statut de connexion</h2>
+          <h2 className="connection-title">Statut de connexion</h2>
           <p>{connectionMessage}</p>
           {connectionStatus === 'connected' && !telemetryReceived && (
             <p className="connection-detail">En attente des premières données du jeu. Le jeu n'est pas ouvert ou le relay-server ne reçoit pas les packets UDP.</p>
@@ -1083,23 +1086,23 @@ function App() {
         </div>
 
         <div className="capture-summary">
-          <div>
+          <div className="capture-summary-row">
             <span>Points enregistrés</span>
             <strong>{captureSummary.points}</strong>
           </div>
-          <div>
+          <div className="capture-summary-row">
             <span>Pic RPM</span>
             <strong>{Math.round(captureSummary.maxRpm)} RPM</strong>
           </div>
-          <div>
+          <div className="capture-summary-row">
             <span>Vitesse max</span>
             <strong>{Math.round(captureSummary.maxSpeed)} km/h</strong>
           </div>
-          <div>
+          <div className="capture-summary-row">
             <span>Changements marqués</span>
             <strong>{captureSummary.bigChanges}</strong>
           </div>
-          <div>
+          <div className="capture-summary-row">
             <span>Profil ciblé</span>
             <strong>{analysisType === 'custom' ? customProfile.name : courseProfiles[analysisType]?.name}</strong>
           </div>
@@ -1142,7 +1145,7 @@ function App() {
             <div className="rpm-track">
               <div
                 className="rpm-fill"
-                style={{ width: `${Math.min(rpmPercent, 100)}%`, backgroundColor: rpmPercent > 90 ? '#ff3366' : '#00cc99' }}
+                style={{ width: `${Math.min(rpmPercent, 100)}%`, backgroundColor: rpmPercent > 90 ? '#FF0055' : '#CFFF04' }}
               />
             </div>
 
