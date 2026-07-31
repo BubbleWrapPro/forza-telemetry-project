@@ -30,6 +30,14 @@ input {
   border-radius: 24px;
   background: rgba(15, 23, 42, 0.95);
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.35);
+  position: relative;
+}
+
+.back-btn {
+  justify-self: start;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
 }
 
 .auth-panel h1,
@@ -52,10 +60,19 @@ input {
 .ghost-btn {
   border: none;
   border-radius: 999px;
-  padding: 0.7rem 1rem;
+  padding: 0.7rem 1.2rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s ease, background 0.2s ease;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.big-btn {
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
 }
 
 .primary-btn {
@@ -77,6 +94,117 @@ input {
   min-height: 100vh;
   padding: 2rem;
   background: linear-gradient(135deg, #07111f 0%, #0f172a 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Landing Page Styles */
+.landing-shell {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  overflow-x: hidden;
+}
+
+.landing-container {
+  max-width: 1000px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.landing-header h1 {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  line-height: 1.5;
+  margin-top: 1rem;
+  background: linear-gradient(to right, #f8fafc, #6ee7f9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-box {
+  padding: 2.5rem !important;
+  margin-bottom: 2rem;
+  background: rgba(15, 23, 42, 0.6) !important;
+  backdrop-filter: blur(10px);
+}
+
+.hero-text {
+  font-size: 1.3rem;
+  color: #cbd5e1;
+  line-height: 1.6;
+  margin-bottom: 2.5rem;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.landing-actions {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.feature-card {
+  text-align: left;
+  padding: 1.5rem !important;
+  margin-bottom: 2rem;
+  min-height: auto !important;
+}
+
+.feature-card h3 {
+  margin: 0 0 0.75rem;
+  color: #00cc99;
+}
+
+.how-it-works {
+  padding: 2rem !important;
+  text-align: left;
+}
+
+.how-it-works h2 {
+  font-size: 1.8rem;
+  margin-bottom: 1.5rem;
+}
+
+.steps-list {
+  display: grid;
+  gap: 1rem;
+  font-size: 1.1rem;
+  color: #cbd5e1;
+  padding-left: 1.5rem;
+}
+
+.steps-list li::marker {
+  color: #6ee7f9;
+  font-weight: 800;
+}
+
+.landing-footer {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 800px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-container {
+    gap: 2rem;
+  }
 }
 
 .connection-shell {

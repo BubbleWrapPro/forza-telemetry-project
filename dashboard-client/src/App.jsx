@@ -76,6 +76,7 @@ function App() {
   // État d'authentification et du formulaire de connexion.
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [view, setView] = useState('landing'); // 'landing', 'auth', 'dashboard'
   const [authMode, setAuthMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -174,13 +175,18 @@ function App() {
       const { data: { session: restoredSession } } = await supabase.auth.getSession();
       if (active) {
         setSession(restoredSession);
+        if (restoredSession) setView('dashboard');
         setAuthLoading(false);
       }
     };
 
     restoreSession();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (active) setSession(nextSession);
+      if (active) {
+        setSession(nextSession);
+        if (nextSession) setView('dashboard');
+        else if (view === 'dashboard') setView('landing');
+      }
     });
 
     return () => {
@@ -211,6 +217,7 @@ function App() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setOfflineMode(false);
+    setView('landing');
   };
 
   // Chaque utilisateur s'abonne uniquement à son canal privé telemetry_<userId>.
@@ -733,10 +740,84 @@ function App() {
     return <div className="dashboard-shell auth-shell"><p>Vérification de la session…</p></div>;
   }
 
-  if (!session) {
+  if (view === 'landing') {
+    return (
+      <div className="dashboard-shell landing-shell">
+        <div className="landing-container">
+          <header className="landing-header">
+            <p className="eyebrow">Forza Telemetry Project</p>
+            <h1>Pilotez avec les données. <br/>Gagnez avec la précision.</h1>
+          </header>
+
+          <main className="landing-content">
+            <div className="hero-box card">
+              <p className="hero-text">
+                Un outil de télémétrie avancé conçu pour <strong>Forza Horizon 6</strong>.
+                Visualisez chaque détail de votre véhicule en temps réel, de la température des pneus à la dynamique du châssis.
+              </p>
+
+              <div className="landing-actions">
+                <button className="primary-btn big-btn" onClick={() => setView(session ? 'dashboard' : 'auth')}>
+                  {session ? 'Aller au Dashboard' : 'Créer un compte / Connexion'}
+                </button>
+                <a
+                  href="https://github.com/BubbleWrapPro/forza-telemetry-project/releases/download/official_release/Setup_Forza_Telemetry.exe"
+                  className="ghost-btn big-btn download-link"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Télécharger l'Agent Local (v1.1.0)
+                </a>
+                <a href="https://github.com/BubbleWrapPro/forza-telemetry-project"
+                className="ghost-btn big-btn"
+                target="_blank"
+                rel="noopener noreferrer"
+                >
+                Voir le code / Collaborer
+                </a>
+              </div>
+            </div>
+
+            <div className="feature-grid">
+              <div className="feature-card card">
+                <h3>📊 Temps Réel</h3>
+                <p>Flux UDP haute fréquence traité instantanément et localement pour un feedback sans délai.</p>
+              </div>
+              <div className="feature-card card">
+                <h3>⚙️ Analyse des données</h3>
+                <p>Analyse poussée de vos données avec des conseils pour améliorer vos performances.</p>
+              </div>
+              <div className="feature-card card">
+                <h3>🎨 Personnalisation</h3>
+                <p>Personnaliser la vue de votre dashboard pour ne voir que les données qui vous intéresse.</p>
+              </div>
+            </div>
+
+            <div className="how-it-works card">
+              <h2>Comment ça marche ?</h2>
+              <ol className="steps-list">
+                <li>Créez votre compte sur cette plateforme.</li>
+                <li>Téléchargez et lancez l'<strong>Agent Télémétrie Forza</strong> sur votre PC.</li>
+                <li>Activez la <strong>Sortie de données (Data Out)</strong> dans les paramètres de Forza.</li>
+                <li>Connectez votre agent local à votre compte</li>
+                <li>Regardez vos chronos et lancer des analyses !</li>
+              </ol>
+            </div>
+          </main>
+
+          <footer className="landing-footer">
+            <p>Optimisé pour Forza Horizon 6 • Développé par <a href="https://github.com/BubbleWrapPro" target="_blank" rel="noopener noreferrer">BubbleWrapPro</a> et <a href="https://github.com/XLpotatoLX" target="_blank" rel="noopener noreferrer">XLpotatoLX</a> </p>
+          </footer>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'auth' && !session) {
     return (
       <div className="dashboard-shell auth-shell">
         <form className="auth-panel" onSubmit={handleAuthSubmit}>
+          <button type="button" className="ghost-btn back-btn" onClick={() => setView('landing')}>← Accueil</button>
           <p className="eyebrow">Forza telemetry</p>
           <h1>{authMode === 'login' ? 'Connexion' : 'Créer un compte'}</h1>
           <p>Connectez-vous pour accéder uniquement à vos données de télémétrie.</p>
