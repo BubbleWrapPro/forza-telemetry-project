@@ -7,9 +7,4 @@
     - `[x]` Wheel Details (Puddle depth, Rotation speed, Surface rumble)
     - `[x]` Car Info (Class, PI, Cylinders)
 - `[x]` Add "Customize Dashboard" panel for user preferences.
-- `[x]` Verify all data points are correctly displayed.
-- `[x]` Landing Page Implementation:
-    - `[x]` Add `view` state to `App.jsx`.
-    - `[x]` Implement `renderLandingPage` in `App.jsx`.
-    - `[x]` Update `App.css` with landing page styles.
-    - `[x]` Connect navigation buttons between landing, auth, and dashboard.
+- `[ ]` Verify all data points are correctly displayed.
