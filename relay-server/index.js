@@ -217,4 +217,30 @@ udpSocket.bind(5607, () => console.log('UDP en écoute sur 5607.'));
 start().catch((error) => {
 console.error(`Démarrage interrompu : ${error.message}`);
 process.exit(1);
+});// ... existing code ...
+let totalGForceLat = 0;
+let totalGForceLon = 0;
+let gForceCount = 0;
+udpSocket.on('message', async (msg) => {
+  if (msg.length < 324 || msg.readInt32LE(0) !== 1) return;
+  // ... existing code ...
+  const gForceLat = - (msg.readFloatLE(20) / 9.80665);
+  const gForceLon = - (msg.readFloatLE(28) / 9.80665);
+  
+  // Mettre à jour la somme des forces G et le nombre d'occurrences
+  totalGForceLat += gForceLat;
+  totalGForceLon += gForceLon;
+  gForceCount++;
+  
+  // Calculer la moyenne de la force G
+  const averageGForceLat = totalGForceLat / gForceCount;
+  const averageGForceLon = totalGForceLon / gForceCount;
+  
+  // ... existing code ...
+  latestTelemetry = {
+    // ... existing properties ...
+    gForce: { x: averageGForceLat, y: averageGForceLon },
+    // ... existing properties ...
+  };
 });
+// ... existing code ...
