@@ -122,6 +122,7 @@ function App() {
     }
   });
   const [showProfileDetails, setShowProfileDetails] = useState(false);
+  const [showAnalysisSections, setShowAnalysisSections] = useState(true);
   const availableMetrics = analysisMetrics;
   // Refs mutables : elles évitent des fermetures obsolètes et des rendus coûteux dans les chemins temps réel.
   const canvasRef = useRef(null);
@@ -347,26 +348,48 @@ function App() {
     const y = Math.max(-maxG, Math.min(maxG, Number(gForce.y) || 0));
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-    ctx.lineWidth = 1;
+
+    // Glowing radar concentric rings
+    ctx.strokeStyle = 'rgba(0, 245, 212, 0.2)';
+    ctx.lineWidth = 1.5;
     [28, 56, 84].forEach((radius) => {
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
       ctx.stroke();
     });
 
+    // Crosshairs
     ctx.beginPath();
-    ctx.moveTo(centerX - 88, centerY);
-    ctx.lineTo(centerX + 88, centerY);
-    ctx.moveTo(centerX, centerY - 88);
-    ctx.lineTo(centerX, centerY + 88);
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.moveTo(centerX - 90, centerY);
+    ctx.lineTo(centerX + 90, centerY);
+    ctx.moveTo(centerX, centerY - 90);
+    ctx.lineTo(centerX, centerY + 90);
+    ctx.strokeStyle = 'rgba(0, 245, 212, 0.25)';
     ctx.stroke();
 
+    // Outer glow ring
     ctx.beginPath();
-    ctx.arc(centerX + x * scale, centerY - y * scale, 7, 0, 2 * Math.PI);
-    ctx.fillStyle = '#ff3366';
+    ctx.arc(centerX, centerY, 90, 0, 2 * Math.PI);
+    ctx.strokeStyle = 'rgba(0, 245, 212, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Position Dot with Halo Effect
+    const dotX = centerX + x * scale;
+    const dotY = centerY - y * scale;
+
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 11, 0, 2 * Math.PI);
+    ctx.fillStyle = 'rgba(255, 0, 85, 0.3)';
     ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 6, 0, 2 * Math.PI);
+    ctx.fillStyle = '#ff0055';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
   };
 
   const rpmPercent = Math.max(0, ((telemetry.rpm - telemetry.idleRpm) / (telemetry.maxRpm - telemetry.idleRpm)) * 100);
@@ -378,11 +401,11 @@ function App() {
   const powerHp = telemetry.powerHp || 0;
 
   const temperatureColor = (temperature) => {
-    if (!Number.isFinite(temperature)) return 'rgba(71, 85, 105, 0.72)';
-    if (temperature < 65) return '#38bdf8';
-    if (temperature < 85) return '#22c55e';
-    if (temperature < 105) return '#facc15';
-    return '#f87171';
+    if (!Number.isFinite(temperature)) return 'rgba(100, 116, 139, 0.6)';
+    if (temperature < 65) return '#3a86ff';
+    if (temperature < 85) return '#00f5d4';
+    if (temperature < 105) return '#ffbe0b';
+    return '#ff0055';
   };
 
   // Normalise les données optionnelles du relais : null signifie « donnée non disponible », jamais zéro.
@@ -733,10 +756,20 @@ function App() {
       <header className="dashboard-header">
         <div>
           <p className="eyebrow">Forza telemetry</p>
-          <button type="button" className="ghost-btn" onClick={handleSignOut}>Déconnexion</button>
           <h1>Dashboard télémétrique</h1>
         </div>
-        <div className={`status-pill ${offlineMode ? 'offline-status' : ''}`}>{offlineMode ? 'Mode hors ligne' : 'Données live'}</div>
+        <div className="dashboard-header-actions">
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => setShowAnalysisSections((prev) => !prev)}
+            aria-expanded={showAnalysisSections}
+          >
+            {showAnalysisSections ? 'Masquer l’analyse' : 'Afficher l’analyse'}
+          </button>
+          <button type="button" className="ghost-btn" onClick={handleSignOut}>Déconnexion</button>
+          <div className={`status-pill ${offlineMode ? 'offline-status' : ''}`}>{offlineMode ? 'Mode hors ligne' : 'Données live'}</div>
+        </div>
       </header>
 
       {offlineMode && (
@@ -745,222 +778,225 @@ function App() {
         </div>
       )}
 
-      <div className="capture-panel">
-        <div className="capture-controls">
-          <div>
-            <h2>Capture d’analyse</h2>
-            <p>{captureStatus}</p>
-          </div>
-          <div className="capture-buttons">
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={() => {
-                if (captureActive) {
-                  setCaptureActive(false);
-                  setCaptureStatus('Capture arrêtée');
-                } else {
-                  setCaptureData([]);
-                  setAnalysisReport([]);
-                  setCaptureActive(true);
-                  setCaptureStatus('Capture en cours…');
-                }
-              }}
-            >
-              {captureActive ? 'Arrêter la capture' : 'Démarrer la capture'}
-            </button>
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                setCaptureData([]);
-                setAnalysisReport([]);
-                setCaptureStatus('Capture effacée');
-              }}
-            >
-              Effacer la capture
-            </button>
-          </div>
-        </div>
-
-        <div className="capture-toolbar">
-          <label>
-            Type de course
-            <select value={analysisType} onChange={(event) => setAnalysisType(event.target.value)}>
-              <option value="f1">F1</option>
-              <option value="rallye">Rallye</option>
-              <option value="crossCountry">Cross country</option>
-              <option value="route">Route</option>
-              <option value="drift">Drift</option>
-              <option value="custom">Profil personnalisé local</option>
-            </select>
-          </label>
-          <div className="capture-toolbar-actions">
-            <button type="button" className="ghost-btn" onClick={() => setShowProfileDetails(true)}>
-              Voir le profil
-            </button>
-            <button type="button" className="primary-btn" onClick={analyzeCapture}>
-              Lancer l’analyse
-            </button>
-          </div>
-        </div>
-
-        {analysisType === 'custom' && (
-          <div className="custom-profile-panel">
-            <div className="profile-panel-header">
+      {showAnalysisSections && (
+        <>
+          <div className="capture-panel">
+            <div className="capture-controls">
               <div>
-                <h3>Profil personnalisé local</h3>
-                <p>Choisis les métriques à comparer et définis les plages de performance attendues. Les modifications sont sauvegardées localement sur cet appareil.</p>
+                <h2>Capture d’analyse</h2>
+                <p>{captureStatus}</p>
               </div>
-              <button type="button" className="ghost-btn" onClick={resetCustomProfile}>
-                Réinitialiser
-              </button>
+              <div className="capture-buttons">
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => {
+                    if (captureActive) {
+                      setCaptureActive(false);
+                      setCaptureStatus('Capture arrêtée');
+                    } else {
+                      setCaptureData([]);
+                      setAnalysisReport([]);
+                      setCaptureActive(true);
+                      setCaptureStatus('Capture en cours…');
+                    }
+                  }}
+                >
+                  {captureActive ? 'Arrêter la capture' : 'Démarrer la capture'}
+                </button>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => {
+                    setCaptureData([]);
+                    setAnalysisReport([]);
+                    setCaptureStatus('Capture effacée');
+                  }}
+                >
+                  Effacer la capture
+                </button>
+              </div>
             </div>
 
-            <div className="profile-metric-grid">
-              {availableMetrics.map((metric) => (
-                <div key={metric} className="profile-metric-row">
-                  <label className="metric-toggle">
-                    <input
-                      type="checkbox"
-                      checked={customMetrics[metric]}
-                      onChange={() => setCustomMetrics((prev) => ({ ...prev, [metric]: !prev[metric] }))}
-                    />
-                    <span>{metricLabels[metric]}</span>
-                  </label>
+            <div className="capture-toolbar">
+              <label>
+                Type de course
+                <select value={analysisType} onChange={(event) => setAnalysisType(event.target.value)}>
+                  <option value="f1">F1</option>
+                  <option value="rallye">Rallye</option>
+                  <option value="crossCountry">Cross country</option>
+                  <option value="route">Route</option>
+                  <option value="drift">Drift</option>
+                  <option value="custom">Profil personnalisé local</option>
+                </select>
+              </label>
+              <div className="capture-toolbar-actions">
+                <button type="button" className="ghost-btn" onClick={() => setShowProfileDetails(true)}>
+                  Voir le profil
+                </button>
+                <button type="button" className="primary-btn" onClick={analyzeCapture}>
+                  Lancer l’analyse
+                </button>
+              </div>
+            </div>
 
-                  <div className="metric-range-inputs">
-                    <label>
-                      Min
-                      <input
-                        type="number"
-                        value={customProfile[metric].min}
-                        onChange={(event) => setCustomProfile((prev) => ({
-                          ...prev,
-                          [metric]: { ...prev[metric], min: Number(event.target.value) }
-                        }))}
-                        disabled={!customMetrics[metric]}
-                      />
-                    </label>
-                    <label>
-                      Idéal
-                      <input
-                        type="number"
-                        value={customProfile[metric].ideal}
-                        onChange={(event) => setCustomProfile((prev) => ({
-                          ...prev,
-                          [metric]: { ...prev[metric], ideal: Number(event.target.value) }
-                        }))}
-                        disabled={!customMetrics[metric]}
-                      />
-                    </label>
-                    <label>
-                      Max
-                      <input
-                        type="number"
-                        value={customProfile[metric].max}
-                        onChange={(event) => setCustomProfile((prev) => ({
-                          ...prev,
-                          [metric]: { ...prev[metric], max: Number(event.target.value) }
-                        }))}
-                        disabled={!customMetrics[metric]}
-                      />
-                    </label>
+            {analysisType === 'custom' && (
+              <div className="custom-profile-panel">
+                <div className="profile-panel-header">
+                  <div>
+                    <h3>Profil personnalisé local</h3>
+                    <p>Choisis les métriques à comparer et définis les plages de performance attendues. Les modifications sont sauvegardées localement sur cet appareil.</p>
+                  </div>
+                  <button type="button" className="ghost-btn" onClick={resetCustomProfile}>
+                    Réinitialiser
+                  </button>
+                </div>
+
+                <div className="profile-metric-grid">
+                  {availableMetrics.map((metric) => (
+                    <div key={metric} className="profile-metric-row">
+                      <label className="metric-toggle">
+                        <input
+                          type="checkbox"
+                          checked={customMetrics[metric]}
+                          onChange={() => setCustomMetrics((prev) => ({ ...prev, [metric]: !prev[metric] }))}
+                        />
+                        <span>{metricLabels[metric]}</span>
+                      </label>
+
+                      <div className="metric-range-inputs">
+                        <label>
+                          Min
+                          <input
+                            type="number"
+                            value={customProfile[metric].min}
+                            onChange={(event) => setCustomProfile((prev) => ({
+                              ...prev,
+                              [metric]: { ...prev[metric], min: Number(event.target.value) }
+                            }))}
+                            disabled={!customMetrics[metric]}
+                          />
+                        </label>
+                        <label>
+                          Idéal
+                          <input
+                            type="number"
+                            value={customProfile[metric].ideal}
+                            onChange={(event) => setCustomProfile((prev) => ({
+                              ...prev,
+                              [metric]: { ...prev[metric], ideal: Number(event.target.value) }
+                            }))}
+                            disabled={!customMetrics[metric]}
+                          />
+                        </label>
+                        <label>
+                          Max
+                          <input
+                            type="number"
+                            value={customProfile[metric].max}
+                            onChange={(event) => setCustomProfile((prev) => ({
+                              ...prev,
+                              [metric]: { ...prev[metric], max: Number(event.target.value) }
+                            }))}
+                            disabled={!customMetrics[metric]}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {showProfileDetails && (
+              <div className="profile-details-sheet">
+                <div className="profile-details-header">
+                  <div>
+                    <h3>{(analysisType === 'custom' ? customProfile : courseProfiles[analysisType])?.name}</h3>
+                    <p>{(analysisType === 'custom' ? customProfile : courseProfiles[analysisType])?.description}</p>
+                  </div>
+                  <button type="button" className="ghost-btn" onClick={() => setShowProfileDetails(false)}>Fermer</button>
+                </div>
+                <div className="profile-details-body">
+                  <div className="profile-spec-card">
+                    <h4>Points d’attention</h4>
+                    <ul>
+                      {(analysisType === 'custom' ? customProfile.attentionPoints : courseProfiles[analysisType]?.attentionPoints || []).map((point) => (
+                        <li key={point}>{point}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="profile-spec-card">
+                    <h4>Seuils de comparaison</h4>
+                    <div className="profile-spec-grid">
+                      {availableMetrics.map((metric) => {
+                        const range = (analysisType === 'custom' ? customProfile : courseProfiles[analysisType])?.[metric];
+                        if (!range) return null;
+                        return (
+                          <div key={metric} className="profile-spec-row">
+                            <span>{metricLabels[metric]}</span>
+                            <strong>{range.ideal} {metricUnits[metric]}</strong>
+                            <small>min {range.min} • max {range.max}</small>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              </div>
+            )}
 
-        {showProfileDetails && (
-          <div className="profile-details-sheet">
-            <div className="profile-details-header">
+            <div className="recording-toolbar">
+              <button type="button" className={`secondary-btn ${isRecording ? 'recording' : ''}`} onClick={toggleRecording}>
+                {isRecording ? 'Arrêter l’enregistrement' : 'Démarrer l’enregistrement'}
+              </button>
+              <button type="button" className="ghost-btn" onClick={exportToCSV} disabled={recordedPoints === 0}>
+                Exporter CSV
+              </button>
+              <span className="recording-meta">{recordedPoints} points enregistrés</span>
+            </div>
+
+            <div className="capture-summary">
               <div>
-                <h3>{(analysisType === 'custom' ? customProfile : courseProfiles[analysisType])?.name}</h3>
-                <p>{(analysisType === 'custom' ? customProfile : courseProfiles[analysisType])?.description}</p>
+                <span>Points enregistrés</span>
+                <strong>{captureSummary.points}</strong>
               </div>
-              <button type="button" className="ghost-btn" onClick={() => setShowProfileDetails(false)}>Fermer</button>
+              <div>
+                <span>Pic RPM</span>
+                <strong>{Math.round(captureSummary.maxRpm)} RPM</strong>
+              </div>
+              <div>
+                <span>Vitesse max</span>
+                <strong>{Math.round(captureSummary.maxSpeed)} km/h</strong>
+              </div>
+              <div>
+                <span>Changements marqués</span>
+                <strong>{captureSummary.bigChanges}</strong>
+              </div>
+              <div>
+                <span>Profil ciblé</span>
+                <strong>{analysisType === 'custom' ? customProfile.name : courseProfiles[analysisType]?.name}</strong>
+              </div>
             </div>
-            <div className="profile-details-body">
-              <div className="profile-spec-card">
-                <h4>Points d’attention</h4>
-                <ul>
-                  {(analysisType === 'custom' ? customProfile.attentionPoints : courseProfiles[analysisType]?.attentionPoints || []).map((point) => (
-                    <li key={point}>{point}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="profile-spec-card">
-                <h4>Seuils de comparaison</h4>
-                <div className="profile-spec-grid">
-                  {availableMetrics.map((metric) => {
-                    const range = (analysisType === 'custom' ? customProfile : courseProfiles[analysisType])?.[metric];
-                    if (!range) return null;
-                    return (
-                      <div key={metric} className="profile-spec-row">
-                        <span>{metricLabels[metric]}</span>
-                        <strong>{range.ideal} {metricUnits[metric]}</strong>
-                        <small>min {range.min} • max {range.max}</small>
-                      </div>
-                    );
-                  })}
+          </div>
+
+          <section className="card analysis-card">
+            <div className="card-header">
+              <h2>Rapport d’analyse</h2>
+              <span className="card-tag">Recommandations</span>
+            </div>
+
+            <div className="analysis-list">
+              {analysisReport.length > 0 ? analysisReport.map((item) => (
+                <div key={`${item.title}-${item.detail}`} className={`analysis-item ${item.severity || 'info'}`}>
+                  <strong>{item.title}</strong>
+                  <p>{item.detail}</p>
                 </div>
-              </div>
+              )) : <p className="analysis-empty">Lancez une analyse après une capture pour obtenir un rapport.</p>}
             </div>
-          </div>
-        )}
-
-        <div className="recording-toolbar">
-          <button type="button" className={`secondary-btn ${isRecording ? 'recording' : ''}`} onClick={toggleRecording}>
-            {isRecording ? 'Arrêter l’enregistrement' : 'Démarrer l’enregistrement'}
-          </button>
-          <button type="button" className="ghost-btn" onClick={exportToCSV} disabled={recordedPoints === 0}>
-            Exporter CSV
-          </button>
-          <span className="recording-meta">{recordedPoints} points enregistrés</span>
-        </div>
-
-        <div className="capture-summary">
-          <div>
-            <span>Points enregistrés</span>
-            <strong>{captureSummary.points}</strong>
-          </div>
-          <div>
-            <span>Pic RPM</span>
-            <strong>{Math.round(captureSummary.maxRpm)} RPM</strong>
-          </div>
-          <div>
-            <span>Vitesse max</span>
-            <strong>{Math.round(captureSummary.maxSpeed)} km/h</strong>
-          </div>
-          <div>
-            <span>Changements marqués</span>
-            <strong>{captureSummary.bigChanges}</strong>
-          </div>
-          <div>
-            <span>Profil ciblé</span>
-            <strong>{analysisType === 'custom' ? customProfile.name : courseProfiles[analysisType]?.name}</strong>
-          </div>
-        </div>
-      </div>
-
-      
-      <section className="card analysis-card">
-        <div className="card-header">
-          <h2>Rapport d’analyse</h2>
-          <span className="card-tag">Recommandations</span>
-        </div>
-
-        <div className="analysis-list">
-          {analysisReport.length > 0 ? analysisReport.map((item) => (
-            <div key={`${item.title}-${item.detail}`} className={`analysis-item ${item.severity || 'info'}`}>
-              <strong>{item.title}</strong>
-              <p>{item.detail}</p>
-            </div>
-          )) : <p className="analysis-empty">Lancez une analyse après une capture pour obtenir un rapport.</p>}
-        </div>
-      </section>
+          </section>
+        </>
+      )}
 
       <div className="dashboard-grid">
         <section className="card card-hero">
@@ -980,7 +1016,7 @@ function App() {
           <div className="rpm-track">
             <div
               className="rpm-fill"
-              style={{ width: `${Math.min(rpmPercent, 100)}%`, backgroundColor: rpmPercent > 90 ? '#ff3366' : '#00cc99' }}
+              style={{ width: `${Math.min(rpmPercent, 100)}%`, backgroundColor: rpmPercent > 90 ? '#ff0055' : '#00f5d4' }}
             />
           </div>
 
