@@ -107,6 +107,20 @@ if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
 console.error(`Canal Realtime indisponible (${status}).`);
 }
 });
+// Heartbeat envoyé toutes les 3 secondes pour signaler que le relay est en vie,
+// indépendamment de la réception de paquets UDP du jeu.
+const heartbeatTimer = setInterval(async () => {
+if (!realtimeReady) return;
+try {
+  await telemetryChannel.send({
+    type: 'broadcast',
+    event: 'relay_heartbeat',
+    payload: { ts: Date.now(), user_id: userId }
+  });
+} catch (err) {
+  console.error(`Échec heartbeat : ${err.message}`);
+}
+}, 3000);
 // Les paquets UDP peuvent dépasser 60 Hz : on conserve la plus récente et on
 // évite toute file d'envoi Realtime susceptible d'augmenter la latence.
 const broadcastTimer = setInterval(async () => {
@@ -205,6 +219,7 @@ wheelOnRumbleStrip: { fl: msg.readInt32LE(116) !== 0, fr: msg.readInt32LE(120) !
 });
 // Libère le port UDP et le canal Realtime pour permettre un redémarrage propre.
 const shutdown = async () => {
+clearInterval(heartbeatTimer);
 clearInterval(broadcastTimer);
 udpSocket.close();
 await supabase.removeChannel(telemetryChannel);
@@ -217,30 +232,4 @@ udpSocket.bind(5607, () => console.log('UDP en écoute sur 5607.'));
 start().catch((error) => {
 console.error(`Démarrage interrompu : ${error.message}`);
 process.exit(1);
-});// ... existing code ...
-let totalGForceLat = 0;
-let totalGForceLon = 0;
-let gForceCount = 0;
-udpSocket.on('message', async (msg) => {
-  if (msg.length < 324 || msg.readInt32LE(0) !== 1) return;
-  // ... existing code ...
-  const gForceLat = - (msg.readFloatLE(20) / 9.80665);
-  const gForceLon = - (msg.readFloatLE(28) / 9.80665);
-  
-  // Mettre à jour la somme des forces G et le nombre d'occurrences
-  totalGForceLat += gForceLat;
-  totalGForceLon += gForceLon;
-  gForceCount++;
-  
-  // Calculer la moyenne de la force G
-  const averageGForceLat = totalGForceLat / gForceCount;
-  const averageGForceLon = totalGForceLon / gForceCount;
-  
-  // ... existing code ...
-  latestTelemetry = {
-    // ... existing properties ...
-    gForce: { x: averageGForceLat, y: averageGForceLon },
-    // ... existing properties ...
-  };
 });
-// ... existing code ...

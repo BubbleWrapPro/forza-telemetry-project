@@ -97,8 +97,9 @@ function App() {
   const [analysisReport, setAnalysisReport] = useState([]);
   const [captureStatus, setCaptureStatus] = useState('Prêt à capturer');
   const [connectionStatus, setConnectionStatus] = useState('pending');
-  const [connectionMessage, setConnectionMessage] = useState('Connexion au serveur...');
+  const [connectionMessage, setConnectionMessage] = useState('');
   const [telemetryReceived, setTelemetryReceived] = useState(false);
+  const [relayConnected, setRelayConnected] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedPoints, setRecordedPoints] = useState(0);
@@ -134,6 +135,7 @@ function App() {
   const latestGForceRef = useRef(telemetry.gForce);
   const isRecordingRef = useRef(isRecording);
   const sessionData = useRef([]);
+  const lastHeartbeatRef = useRef(0);
   const [trackPoints, setTrackPoints] = useState([]);
 
   // Restaure la session au chargement puis suit les connexions/déconnexions sans fuite d'abonnement.
@@ -188,6 +190,7 @@ function App() {
   useEffect(() => {
     if (!session?.user?.id) {
       setTelemetryReceived(false);
+      setRelayConnected(false);
       setConnectionStatus('pending');
       return undefined;
     }
@@ -230,32 +233,47 @@ function App() {
       }
     };
 
+    const handleHeartbeat = () => {
+      lastHeartbeatRef.current = Date.now();
+      setRelayConnected(true);
+    };
+
     const handleConnect = () => {
       setConnectionStatus('connected');
-      setConnectionMessage('Connexion établie avec le serveur de télémétrie.');
     };
 
     const handleDisconnect = () => {
       setConnectionStatus('disconnected');
-      setConnectionMessage('Connexion perdue. Vérifie le serveur ou le jeu.');
+      setRelayConnected(false);
+      setConnectionMessage('Connexion perdue avec le canal Supabase Realtime.');
     };
 
     const handleConnectError = () => {
       setConnectionStatus('error');
+      setRelayConnected(false);
       setConnectionMessage('Impossible de se connecter au canal Supabase Realtime.');
     };
 
     const channel = supabase
       .channel(`telemetry_${session.user.id}`, { config: { private: true } })
       .on('broadcast', { event: 'telemetry_update' }, ({ payload }) => handleTelemetry(payload))
+      .on('broadcast', { event: 'relay_heartbeat' }, () => handleHeartbeat())
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') handleConnect();
         else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') handleConnectError();
         else if (status === 'CLOSED') handleDisconnect();
       });
 
+    // Watchdog : déclare le relay hors ligne si aucun heartbeat reçu depuis 10 secondes.
+    const heartbeatWatchdog = setInterval(() => {
+      if (lastHeartbeatRef.current > 0 && Date.now() - lastHeartbeatRef.current > 10_000) {
+        setRelayConnected(false);
+      }
+    }, 5000);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(heartbeatWatchdog);
       if (renderTelemetryTimerRef.current) clearTimeout(renderTelemetryTimerRef.current);
       if (gMeterFrameRef.current) cancelAnimationFrame(gMeterFrameRef.current);
     };
@@ -511,20 +529,20 @@ function App() {
   const captureSummary = captureData.length === 0
     ? { points: 0, maxRpm: 0, maxSpeed: 0, maxBrake: 0, maxSteer: 0, maxGx: 0, maxGy: 0, bigChanges: 0 }
     : {
-        points: captureData.length,
-        maxRpm: Math.max(...captureData.map((point) => point.rpm)),
-        maxSpeed: Math.max(...captureData.map((point) => point.speed)),
-        maxBrake: Math.max(...captureData.map((point) => point.brake)),
-        maxSteer: Math.max(...captureData.map((point) => Math.abs(point.steer))),
-        maxGx: Math.max(...captureData.map((point) => Math.abs(point.gForceX))),
-        maxGy: Math.max(...captureData.map((point) => Math.abs(point.gForceY))),
-        bigChanges: captureData.reduce((count, point, index) => {
-          const prev = captureData[index - 1];
-          if (!prev) return count;
-          const changed = Math.abs(point.rpm - prev.rpm) > 200 || Math.abs(point.speed - prev.speed) > 20 || Math.abs(point.brake - prev.brake) > 15 || Math.abs(point.gForceX - prev.gForceX) > 0.3 || Math.abs(point.gForceY - prev.gForceY) > 0.3;
-          return count + (changed ? 1 : 0);
-        }, 0)
-      };
+      points: captureData.length,
+      maxRpm: Math.max(...captureData.map((point) => point.rpm)),
+      maxSpeed: Math.max(...captureData.map((point) => point.speed)),
+      maxBrake: Math.max(...captureData.map((point) => point.brake)),
+      maxSteer: Math.max(...captureData.map((point) => Math.abs(point.steer))),
+      maxGx: Math.max(...captureData.map((point) => Math.abs(point.gForceX))),
+      maxGy: Math.max(...captureData.map((point) => Math.abs(point.gForceY))),
+      bigChanges: captureData.reduce((count, point, index) => {
+        const prev = captureData[index - 1];
+        if (!prev) return count;
+        const changed = Math.abs(point.rpm - prev.rpm) > 200 || Math.abs(point.speed - prev.speed) > 20 || Math.abs(point.brake - prev.brake) > 15 || Math.abs(point.gForceX - prev.gForceX) > 0.3 || Math.abs(point.gForceY - prev.gForceY) > 0.3;
+        return count + (changed ? 1 : 0);
+      }, 0)
+    };
 
   const courseProfiles = profiles;
 
@@ -729,23 +747,39 @@ function App() {
     );
   }
 
-  if ((connectionStatus !== 'connected' || !telemetryReceived) && !offlineMode) {
+  // Détermine l'état composite affiché sur la page de connexion.
+  const resolvedConnectionPill = (() => {
+    if (connectionStatus === 'disconnected' || connectionStatus === 'error') return { cls: 'error', label: 'Déconnecté' };
+    if (connectionStatus === 'pending') return { cls: 'pending', label: 'En attente' };
+    if (relayConnected && telemetryReceived) return { cls: 'connected', label: 'Données live' };
+    if (relayConnected) return { cls: 'relay-connected', label: 'Relay connecté' };
+    if (lastHeartbeatRef.current > 0) return { cls: 'relay-offline', label: 'Relay hors ligne' };
+    return { cls: 'pending', label: 'En attente' };
+  })();
+
+  if ((!relayConnected || !telemetryReceived) && !offlineMode) {
     return (
       <div className="dashboard-shell connection-shell">
         <div className="connection-panel">
-          <span className={`connection-pill ${connectionStatus}`}>{connectionStatus === 'connected' ? 'Connecté' : connectionStatus === 'pending' ? 'En attente' : 'Déconnecté'}</span>
+          <span className={`connection-pill ${resolvedConnectionPill.cls}`}>{resolvedConnectionPill.label}</span>
           <h2>Statut de connexion</h2>
           <p>{connectionMessage}</p>
-          {connectionStatus === 'connected' && !telemetryReceived && (
-            <p className="connection-detail">En attente des premières données du jeu. Le jeu n'est pas ouvert ou le relay-server ne reçoit pas les packets UDP.</p>
+          {connectionStatus === 'connected' && !relayConnected && lastHeartbeatRef.current === 0 && (
+            <p className="connection-detail">Canal Supabase connecté. En attente du premier heartbeat du relay agent…</p>
+          )}
+          {connectionStatus === 'connected' && !relayConnected && lastHeartbeatRef.current > 0 && (
+            <p className="connection-detail">Le relay agent ne répond plus. Vérifiez qu'il est lancé sur le poste de jeu.</p>
+          )}
+          {connectionStatus === 'connected' && relayConnected && !telemetryReceived && (
+            <p className="connection-detail">Le relay agent est en ligne. En attente des premières données du jeu — le jeu n'est pas ouvert ou ne transmet pas de paquets UDP.</p>
           )}
           {(connectionStatus === 'disconnected' || connectionStatus === 'error') && (
-            <p className="connection-detail">Vérifier le serveur relay ou la connexion entre le jeu et ce poste avant de continuer.</p>
+            <p className="connection-detail">Vérifier la connexion internet ou réessayer plus tard.</p>
           )}
           <button type="button" className="primary-btn offline-access-btn" onClick={() => setOfflineMode(true)}>
-            Accéder à l’interface hors ligne
+            Accéder à l'interface hors ligne
           </button>
-          <p className="connection-detail">Le mode hors ligne affiche des valeurs de démonstration à zéro : aucun test ni diagnostic n’est effectué en direct.</p>
+          <p className="connection-detail">Le mode hors ligne affiche des valeurs de démonstration à zéro : aucun test ni diagnostic n'est effectué en direct.</p>
         </div>
       </div>
     );
@@ -768,7 +802,7 @@ function App() {
             {showAnalysisSections ? 'Masquer l’analyse' : 'Afficher l’analyse'}
           </button>
           <button type="button" className="ghost-btn" onClick={handleSignOut}>Déconnexion</button>
-          <div className={`status-pill ${offlineMode ? 'offline-status' : ''}`}>{offlineMode ? 'Mode hors ligne' : 'Données live'}</div>
+          <div className={`status-pill ${offlineMode ? 'offline-status' : !relayConnected ? 'relay-lost' : ''}`}>{offlineMode ? 'Mode hors ligne' : !relayConnected ? 'Relay perdu' : 'Données live'}</div>
         </div>
       </header>
 
